@@ -18,9 +18,9 @@ Web app operasional bimbel dan les privat. Next.js App Router + React + Neon Pos
 
 ## Persiapan database Neon baru
 
-Project Neon baru **belum dibuat** dalam sesi pembangunan karena connector tidak mengekspos `create_project` dan tidak ada kredensial CLI Neon. Database proyek lain tidak disentuh.
+Project Neon `bantu-beres-bimbel-pro` sudah tersedia: `empty-paper-68217939`, branch `br-plain-lake-b4junk2l`, PostgreSQL 18, AWS us-east-2. Pada 3 Oktober 2026 migrasi awal diterapkan secara atomik melalui connector Neon: 5 tabel aplikasi, 4 foreign key, dan 1 catatan migrasi Drizzle terverifikasi. Database tanpa akun/data contoh. Connection string pooled/direct sudah disiapkan di `.env.local` lokal, tidak dimasukkan ke GitHub.
 
-1. Di Neon Console buat project baru bernama `bantu-beres-bimbel-pro` (region dekat pengguna).
+1. Gunakan project Neon di atas; tidak perlu membuat project lain.
 2. Ambil connection string pooled dan direct. Simpan di `.env.local` sesuai `.env.example`.
 3. Jalankan `npm ci`, lalu `npm run db:migrate`. Migrasi Drizzle versioned ada di `db/migrations`.
 4. Jalankan `npm run db:check`. Hasil sehat harus menunjukkan `connected: true` dan `migrated: true`.
@@ -58,7 +58,7 @@ WA hanya klik-kirim pribadi. Tidak ada pengiriman otomatis/Fonnte terjadwal. Pen
 
 `npm test` memeriksa kalkulasi dan alur database lewat PostgreSQL PGlite khusus pengujian: pendaftaran, login, CRUD, relasi, presensi upsert, honor historis, tagihan idempotent, cicilan/dispensasi, pembatalan, role dan isolasi tenant. `npm run typecheck` dan `npm run build` untuk pemeriksaan produksi.
 
-Neon produksi belum dapat diuji sebelum connection string project baru tersedia. Konten room Analisis Konsep Web Bimbel tidak dapat dipulihkan lengkap; implementasi mengacu PDF panduan aplikasi lama yang tersedia. Belum dinyatakan parity terhadap spesifikasi room yang tidak dapat dibaca.
+Query langsung melalui connector Neon berhasil dan schema/migrasi terverifikasi. Koneksi TCP aplikasi dari lingkungan kerja ini belum dapat diuji karena DNS host Neon menghasilkan `EAI_AGAIN`; pengujian `/api/health` setelah deploy tetap wajib. Konten room Analisis Konsep Web Bimbel tidak dapat dipulihkan lengkap; implementasi mengacu PDF panduan aplikasi lama yang tersedia. Belum dinyatakan parity terhadap spesifikasi room yang tidak dapat dibaca.
 
 ## Struktur
 
@@ -70,7 +70,7 @@ Cookie sesi HttpOnly/SameSite, 6 jam. Password scrypt dengan salt acak. Salah pa
 ## Checklist release sebelum deploy Vercel
 
 1. Pastikan GitHub Actions terakhir hijau. Workflow menjalankan `npm run verify`: unit/integration test, TypeScript, dan production build.
-2. Siapkan project Neon khusus `bantu-beres-bimbel-pro`.
+2. Gunakan project Neon `empty-paper-68217939` yang sudah dimigrasi.
 3. Jalankan migrasi sekali menggunakan `DATABASE_URL_UNPOOLED`, lalu `npm run db:check` harus menghasilkan `connected: true` dan `migrated: true`.
 4. Saat import repository ke Vercel gunakan Node.js 22, Framework Next.js, Root Directory `.`.
 5. Isi Environment Variables production: `DATABASE_URL` (pooled) dan `APP_URL` (URL production final tanpa slash akhir). Jangan membuat `NEXT_PUBLIC_DATABASE_URL`.

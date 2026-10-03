@@ -7,10 +7,10 @@
 - Tidak ada pesan WhatsApp dikirim dan tidak ada deployment Vercel.
 
 ## Batas verifikasi
-Browser menguji UI dengan respons snapshot fixture, bukan koneksi Neon produksi. Alur data nyata diuji di PostgreSQL PGlite khusus test. Project Neon baru dan pengujian koneksi produksi tetap belum selesai karena tidak tersedia kemampuan create_project maupun kredensial Neon CLI.
+Browser menguji UI dengan respons snapshot fixture, bukan koneksi Neon produksi. Alur data nyata diuji di PostgreSQL PGlite khusus test. Project Neon `empty-paper-68217939`, branch `br-plain-lake-b4junk2l`, sudah dimigrasi pada 3 Oktober 2026 melalui connector Neon dalam satu transaksi. Query pascamigrasi: 5 tabel aplikasi, 4 foreign key, 1 migrasi, 0 akun dan 0 tenant. Connection string pooled/direct tersimpan lokal dan tidak di GitHub. Koneksi TCP dari runtime lokal gagal DNS `EAI_AGAIN`, sehingga alur aplikasi ke Neon end-to-end belum dinyatakan lulus; cek `/api/health` setelah deploy.
 
 ## Checklist setelah Neon siap
-1. Jalankan migrasi pada project baru.
+1. Migrasi awal selesai; untuk perubahan schema berikutnya gunakan `npm run db:migrate`.
 2. Daftar lembaga → masuk → buat akun tim.
 3. Program/pengajar/kelas/siswa/pendaftaran → presensi → tagihan → cicilan → kuitansi.
 4. Periksa role dan isolasi tenant pada akun nyata.

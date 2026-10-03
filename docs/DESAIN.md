@@ -13,4 +13,4 @@ Aplikasi operasional bimbel/privat berbasis panduan PANDUAN_BantuBeres-BIMBEL-PR
 - Logo master Bantu Beres digunakan apa adanya. Palet ungu terkendali; light/dark, mobile navigation, fokus keyboard/modal/validasi.
 
 ## Batas bukti
-Isi lengkap room Analisis Konsep Web Bimbel belum dapat diambil. PDF merupakan sumber terverifikasi. Pembuatan project Neon baru membutuhkan koneksi yang mendukung create_project atau kredensial Neon. Tidak menggunakan database proyek lain.
+Isi lengkap room Analisis Konsep Web Bimbel belum dapat diambil. PDF merupakan sumber terverifikasi. Project khusus `empty-paper-68217939` sudah ditemukan dan dimigrasi, branch `br-plain-lake-b4junk2l`. Tidak menggunakan database proyek lain.
