@@ -65,3 +65,14 @@ Neon produksi belum dapat diuji sebelum connection string project baru tersedia.
 `app/` UI dan API Next.js; `components/` ruang kerja/modal; `lib/domain.ts` aturan dan field; `lib/service.ts` transaksi/relasi/akses; `lib/auth.ts` scrypt/session; `db/` Drizzle schema/migrasi; `tests/` PostgreSQL integrasi dan unit.
 
 Cookie sesi HttpOnly/SameSite, 6 jam. Password scrypt dengan salt acak. Salah password 5 kali mengunci akun 15 menit. Menonaktifkan akun mencabut sesi. Database URL tidak dikirim browser. Secret tidak disimpan di repository.
+
+
+## Checklist release sebelum deploy Vercel
+
+1. Pastikan GitHub Actions terakhir hijau. Workflow menjalankan `npm run verify`: unit/integration test, TypeScript, dan production build.
+2. Siapkan project Neon khusus `bantu-beres-bimbel-pro`.
+3. Jalankan migrasi sekali menggunakan `DATABASE_URL_UNPOOLED`, lalu `npm run db:check` harus menghasilkan `connected: true` dan `migrated: true`.
+4. Saat import repository ke Vercel gunakan Node.js 22, Framework Next.js, Root Directory `.`.
+5. Isi Environment Variables production: `DATABASE_URL` (pooled) dan `APP_URL` (URL production final tanpa slash akhir). Jangan membuat `NEXT_PUBLIC_DATABASE_URL`.
+6. Setelah deploy buka `/api/health`. Kondisi sehat: `configured: true`, `connected: true`, `migrated: true`.
+7. Baru setelah health sehat, daftar akun owner pertama dan lakukan smoke test: login → program → pengajar → kelas → siswa → pendaftaran → presensi → tagihan → pembayaran → kuitansi → laporan.
