@@ -1,8 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
+import { migrate } from "drizzle-orm/pglite/migrator";
 import * as schema from "../db/schema";
 import { register, authenticate, login } from "../lib/auth";
 import {
@@ -17,11 +18,12 @@ import {
   voidRecord,
   bulkImport,
 } from "../lib/service";
-import { today, invoiceBalance } from "../lib/domain";
+import { today } from "../lib/domain";
 test("alur bimbel dengan PostgreSQL: CRUD, presensi, billing, isolasi dan role", async () => {
   const pg = new PGlite();
-  await pg.exec(readFileSync("db/migrations/0000_slow_union_jack.sql", "utf8"));
   const db = drizzle(pg, { schema });
+  await migrate(db, { migrationsFolder: "./db/migrations" });
+  await migrate(db, { migrationsFolder: "./db/migrations" });
   const token = await register(
     {
       name: "Pemilik QA",
