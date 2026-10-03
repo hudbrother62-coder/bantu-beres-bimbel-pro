@@ -28,8 +28,21 @@ async function handler(
           { configured: false, connected: false, migrated: false, tables: [] },
           { status: 503 },
         );
-      const status = await checkDatabase();
-      return NextResponse.json({ configured: true, ...status });
+      try {
+        const status = await checkDatabase();
+        return NextResponse.json({ configured: true, ...status });
+      } catch {
+        return NextResponse.json(
+          {
+            configured: true,
+            connected: false,
+            migrated: false,
+            tables: [],
+            error: "Koneksi database Neon gagal.",
+          },
+          { status: 503 },
+        );
+      }
     }
     if (!process.env.DATABASE_URL)
       return NextResponse.json(
