@@ -9,7 +9,8 @@
     "test": "node --import tsx --test tests/*.test.ts",
     "db:migrate": "node --import tsx db/migrate.ts",
     "typecheck": "tsc --noEmit",
-    "db:check": "node --import tsx db/check.ts"
+    "db:check": "node --import tsx db/check.ts",
+    "verify": "npm test && npm run typecheck && npm run build"
   },
   "dependencies": {
     "@vercel/functions": "^3.9.11",
@@ -35,5 +36,8 @@
     "exceljs": {
       "uuid": "^11.1.1"
     }
+  },
+  "engines": {
+    "node": "22.x"
   }
 }
