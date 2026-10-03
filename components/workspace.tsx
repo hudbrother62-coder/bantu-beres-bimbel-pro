@@ -215,7 +215,7 @@ function FormFields({
 export default function Workspace() {
   const [state, setState] = useState<any>(null),
     [loading, setLoading] = useState(true),
-    [configured, setConfigured] = useState(true),
+    [configured, setConfigured] = useState(false),
     [error, setError] = useState(""),
     [toast, setToast] = useState(""),
     [month, setMonth] = useState(today().slice(0, 7)),
@@ -258,11 +258,20 @@ export default function Workspace() {
   useEffect(() => {
     api("health")
       .then((h) => {
-        setConfigured(h.configured);
-        if (h.configured) refresh();
-        else setLoading(false);
+        const ready = Boolean(h.configured && h.connected && h.migrated);
+        setConfigured(ready);
+        if (ready) refresh();
+        else {
+          setError(
+            h.configured && h.connected
+              ? "Database Neon sudah terhubung, tetapi migrasi belum dijalankan."
+              : "Database Neon belum siap. Periksa DATABASE_URL lalu jalankan migrasi.",
+          );
+          setLoading(false);
+        }
       })
       .catch((e) => {
+        setConfigured(false);
         setError(e.message);
         setLoading(false);
       });
