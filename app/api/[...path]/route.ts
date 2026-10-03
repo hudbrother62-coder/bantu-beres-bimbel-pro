@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { database } from "../../../lib/db";
+import { checkDatabase, database } from "../../../lib/db";
 import { authenticate, login, logout, register } from "../../../lib/auth";
 import * as svc from "../../../lib/service";
 export const runtime = "nodejs";
@@ -22,8 +22,15 @@ async function handler(
           { status: 403 },
         );
     }
-    if (path === "health")
-      return NextResponse.json({ configured: !!process.env.DATABASE_URL });
+    if (path === "health") {
+      if (!process.env.DATABASE_URL)
+        return NextResponse.json(
+          { configured: false, connected: false, migrated: false, tables: [] },
+          { status: 503 },
+        );
+      const status = await checkDatabase();
+      return NextResponse.json({ configured: true, ...status });
+    }
     if (!process.env.DATABASE_URL)
       return NextResponse.json(
         {
