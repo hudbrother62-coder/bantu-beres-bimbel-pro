@@ -23,7 +23,9 @@ Project Neon baru **belum dibuat** dalam sesi pembangunan karena connector tidak
 1. Di Neon Console buat project baru bernama `bantu-beres-bimbel-pro` (region dekat pengguna).
 2. Ambil connection string pooled dan direct. Simpan di `.env.local` sesuai `.env.example`.
 3. Jalankan `npm ci`, lalu `npm run db:migrate`. Migrasi Drizzle versioned ada di `db/migrations`.
-4. Jalankan `npm run dev`. Daftar lembaga dan akun pemilik pertama lewat aplikasi. Tidak ada password default/data contoh produksi.
+4. Jalankan `npm run db:check`. Hasil sehat harus menunjukkan `connected: true` dan `migrated: true`.
+5. Jalankan `npm run dev`, lalu buka `/api/health`. Endpoint ini benar-benar melakukan query ke PostgreSQL dan memeriksa tabel inti, bukan hanya mengecek env.
+6. Daftar lembaga dan akun pemilik pertama lewat aplikasi. Tidak ada password default/data contoh produksi.
 
 ```env
 DATABASE_URL=postgresql://...-pooler.../neondb?sslmode=require
