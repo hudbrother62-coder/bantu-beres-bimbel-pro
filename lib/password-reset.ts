@@ -3,6 +3,7 @@ import { and, eq, gt, desc } from "drizzle-orm";
 import { accounts, passwordResetTokens, sessions } from "../db/schema";
 import { database } from "./db";
 import { hashPassword, issueSession, tokenHash } from "./auth";
+import { verifyGoogleIdToken } from "./google-id-token";
 
 type EmailSender = (address: string, url: string) => Promise<void>;
 
@@ -93,4 +94,45 @@ export async function confirmPasswordReset(input: any, db: any = database()) {
     await tx.delete(passwordResetTokens).where(eq(passwordResetTokens.accountId, account.id));
     return issueSession(tx, account.id);
   });
+}
+
+
+/**
+ * Uses a fresh, Google-signed ID token to prove control of the registered
+ * Gmail / Workspace address. Returns a short-lived, single-use reset ticket.
+ * No email service is needed.
+ */
+export async function startGooglePasswordReset(
+  input: any,
+  db: any = database(),
+  verifier: (credential: string) => Promise<{ email: string; sub: string }> = verifyGoogleIdToken,
+) {
+  const identity = await verifier(String(input?.credential || ""));
+  const email = identity.email.trim().toLowerCase();
+  const [account] = await db.select({
+    id: accounts.id,
+    active: accounts.active,
+  }).from(accounts).where(eq(accounts.email, email)).limit(1);
+  if (!account) {
+    throw new Error("Email Google ini belum terdaftar. Pilih akun Google yang digunakan saat mendaftar Bimbel Pro.");
+  }
+  if (!account.active) throw new Error("Akun sedang dinonaktifkan. Hubungi pemilik bimbel.");
+
+  const now = Date.now();
+  const recent = await db.select({
+    createdAt: passwordResetTokens.createdAt,
+  }).from(passwordResetTokens)
+    .where(and(eq(passwordResetTokens.accountId, account.id),
+      gt(passwordResetTokens.createdAt, new Date(now - 60 * 60 * 1000))))
+    .orderBy(desc(passwordResetTokens.createdAt)).limit(6);
+  if (recent.length >= 6) throw new Error("Terlalu banyak percobaan. Coba lagi dalam satu jam.");
+
+  const resetToken = randomBytes(32).toString("hex");
+  await db.insert(passwordResetTokens).values({
+    hash: tokenHash(resetToken),
+    accountId: account.id,
+    createdAt: new Date(now),
+    expiresAt: new Date(now + 10 * 60 * 1000),
+  });
+  return { email, resetToken };
 }

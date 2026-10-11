@@ -47,6 +47,7 @@ import {
 } from "../lib/domain";
 import { downloadExcel, readExcel, templateFor } from "../lib/excel";
 import Modal from "./modal";
+import GooglePasswordRecovery from "./google-password-recovery";
 const navigation = [
   ["dashboard", "Ringkasan", LayoutDashboard],
   ["students", "Siswa & wali", Users],
@@ -224,7 +225,6 @@ export default function Workspace() {
     [menu, setMenu] = useState(false),
     [busy, setBusy] = useState(false),
     [authMode, setAuthMode] = useState("login"),
-    [resetSent, setResetSent] = useState(false),
     [auth, setAuth] = useState<Data>({}),
     [search, setSearch] = useState(""),
     [archived, setArchived] = useState(false),
@@ -499,7 +499,7 @@ export default function Workspace() {
               {authMode === "login"
                 ? "Masuk ke ruang kerja bimbel Anda."
                 : authMode === "forgot"
-                  ? "Masukkan email yang terdaftar. Kami akan mengirim tautan untuk membuat password baru."
+                  ? "Pilih akun Google yang terdaftar, lalu buat password baru langsung di sini."
                   : "Buat akun pemilik dan lembaga baru."}
             </p>
             {!configured && (
@@ -517,22 +517,17 @@ export default function Workspace() {
                 {error}
               </div>
             )}
-            {resetSent && authMode === "forgot" && (
-              <div role="status" className="notice">Jika email terdaftar, tautan pemulihan telah dikirim. Periksa kotak masuk atau folder spam.</div>
-            )}
+            {authMode === "forgot" ? (
+              <GooglePasswordRecovery />
+            ) : (
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 setBusy(true);
                 try {
                   setError("");
-                  if (authMode === "forgot") {
-                    await api("auth/request-reset", { email: auth.email });
-                    setResetSent(true);
-                  } else {
-                    await api("auth/" + (authMode === "login" ? "login" : "register"), auth);
-                    await refresh();
-                  }
+                  await api("auth/" + (authMode === "login" ? "login" : "register"), auth);
+                  await refresh();
                 } catch (e) {
                   setError((e as Error).message);
                 } finally {
@@ -558,15 +553,7 @@ export default function Workspace() {
                   rows={[]}
                 />
               )}
-              {authMode === "forgot" ? (
-                <label>
-                  Email terdaftar
-                  <input type="email" autoComplete="email" required maxLength={200}
-                    value={auth.email || ""}
-                    onChange={(e) => setAuth({ ...auth, email: e.target.value })} />
-                </label>
-              ) : (
-                <>
+              <>
                   {authMode === "login" && (
                     <label>
                       Email atau username
@@ -589,23 +576,20 @@ export default function Workspace() {
                         onClick={() => {
                           setAuthMode("forgot");
                           setAuth({ email: String(auth.identifier || "").includes("@") ? auth.identifier : "" });
-                          setResetSent(false);
                           setError("");
                         }}>Lupa password?</button>
                     </div>
                   )}
-                </>
-              )}
+              </>
               <button className="primary full" disabled={busy || !configured}>
                 {busy
                   ? "Memproses…"
                   : authMode === "login"
                     ? "Masuk"
-                    : authMode === "forgot"
-                      ? "Kirim tautan pemulihan"
-                      : "Daftar bimbel"}
+                    : "Daftar bimbel"}
               </button>
             </form>
+            )}
             <p className="auth-switch">
               {authMode === "login"
                 ? "Belum memiliki akun?"
@@ -617,7 +601,6 @@ export default function Workspace() {
                 onClick={() => {
                   setAuthMode(authMode === "login" ? "register" : "login");
                   setAuth({});
-                  setResetSent(false);
                   setError("");
                 }}
               >
