@@ -47,7 +47,7 @@ import {
 } from "../lib/domain";
 import { downloadExcel, readExcel, templateFor } from "../lib/excel";
 import Modal from "./modal";
-import GooglePasswordRecovery from "./google-password-recovery";
+import OtpPasswordRecovery from "./otp-password-recovery";
 const navigation = [
   ["dashboard", "Ringkasan", LayoutDashboard],
   ["students", "Siswa & wali", Users],
@@ -499,7 +499,7 @@ export default function Workspace() {
               {authMode === "login"
                 ? "Masuk ke ruang kerja bimbel Anda."
                 : authMode === "forgot"
-                  ? "Pilih akun Google yang terdaftar, lalu buat password baru langsung di sini."
+                  ? "Masukkan email terdaftar, verifikasi kode OTP, lalu atur password baru."
                   : "Buat akun pemilik dan lembaga baru."}
             </p>
             {!configured && (
@@ -518,7 +518,7 @@ export default function Workspace() {
               </div>
             )}
             {authMode === "forgot" ? (
-              <GooglePasswordRecovery />
+              <OtpPasswordRecovery />
             ) : (
             <form
               onSubmit={async (e) => {

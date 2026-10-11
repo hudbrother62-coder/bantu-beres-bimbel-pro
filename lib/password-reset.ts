@@ -1,72 +1,122 @@
-import { randomBytes } from "node:crypto";
-import { and, eq, gt, desc } from "drizzle-orm";
-import { accounts, passwordResetTokens, sessions } from "../db/schema";
+import { randomBytes, randomInt } from "node:crypto";
+import { and, eq, gt, isNull, lt, desc, sql } from "drizzle-orm";
+import { accounts, passwordResetOtps, passwordResetTokens, sessions } from "../db/schema";
 import { database } from "./db";
-import { hashPassword, issueSession, tokenHash } from "./auth";
-import { verifyGoogleIdToken } from "./google-id-token";
+import { hashPassword, verifyPassword, issueSession, tokenHash } from "./auth";
 
-type EmailSender = (address: string, url: string) => Promise<void>;
+type OtpSender = (address: string, code: string) => Promise<void>;
 
-async function sendResetEmail(address: string, url: string) {
+function validEmail(input: any) {
+  const email = String(input?.email || "").trim().toLowerCase();
+  if (email.length > 200 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    throw new Error("Masukkan email yang valid.");
+  return email;
+}
+
+async function sendOtpEmail(address: string, code: string) {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.PASSWORD_RESET_FROM;
-  if (!apiKey || !from) throw new Error("Email pemulihan belum dikonfigurasi. Hubungi admin Bimbel Pro.");
-  const res = await fetch("https://api.resend.com/emails", {
+  if (!apiKey || !from)
+    throw new Error("Pengiriman OTP belum dikonfigurasi. Hubungi pengelola Bimbel Pro.");
+  const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
-    headers: {
-      Authorization: "Bearer " + apiKey,
-      "Content-Type": "application/json",
-    },
+    headers: { Authorization: "Bearer " + apiKey, "Content-Type": "application/json" },
     body: JSON.stringify({
       from,
       to: [address],
-      subject: "Pulihkan password - Bantu Beres Bimbel Pro",
-      text: "Kami menerima permintaan untuk mengganti password Bimbel Pro.\n\nBuka tautan ini untuk menetapkan password baru:\n" + url + "\n\nTautan hanya berlaku selama 15 menit dan bisa digunakan satu kali. Jika Anda tidak meminta perubahan, abaikan email ini.",
+      subject: "Kode pemulihan password Bantu Beres Bimbel Pro",
+      text: "Kode OTP Bimbel Pro Anda: " + code +
+        "\n\nKode berlaku 10 menit dan hanya dapat digunakan satu kali. Jangan bagikan kepada siapa pun. Jika Anda tidak meminta kode, abaikan email ini.",
     }),
+    signal: AbortSignal.timeout(12000),
   });
-  if (!res.ok) throw new Error("Gagal mengirim email pemulihan.");
+  if (!response.ok) throw new Error("Email OTP gagal dikirim. Periksa konfigurasi pengirim.");
 }
 
-export async function requestPasswordReset(
-  input: any,
-  db: any = database(),
-  baseUrl: string = process.env.APP_URL || "",
-  sender?: EmailSender,
-) {
-  const email = String(input?.email || "").trim().toLowerCase();
-  if (email.length > 200 || !/^\S+@\S+\.\S+$/.test(email))
-    throw new Error("Masukkan alamat email yang valid.");
-  // Do not indicate whether an email exists.
+export async function requestPasswordOtp(input: any, db: any = database(), sender?: OtpSender) {
+  const email = validEmail(input);
   if (!sender && (!process.env.RESEND_API_KEY || !process.env.PASSWORD_RESET_FROM))
-    throw new Error("Email pemulihan belum dikonfigurasi. Hubungi admin Bimbel Pro.");
+    throw new Error("Pengiriman OTP belum dikonfigurasi. Hubungi pengelola Bimbel Pro.");
+
   const [account] = await db.select({ id: accounts.id, active: accounts.active })
     .from(accounts).where(eq(accounts.email, email)).limit(1);
   if (!account?.active) return { ok: true };
 
   const now = Date.now();
-  const recent = await db.select({ createdAt: passwordResetTokens.createdAt })
-    .from(passwordResetTokens)
-    .where(and(eq(passwordResetTokens.accountId, account.id), gt(passwordResetTokens.createdAt, new Date(now - 60 * 60 * 1000))))
-    .orderBy(desc(passwordResetTokens.createdAt)).limit(5);
-  if (recent.length >= 5 || recent.some((r: any) => now - new Date(r.createdAt).getTime() < 2 * 60 * 1000))
+  const recent = await db.select({ createdAt: passwordResetOtps.createdAt })
+    .from(passwordResetOtps)
+    .where(and(
+      eq(passwordResetOtps.accountId, account.id),
+      gt(passwordResetOtps.createdAt, new Date(now - 60 * 60 * 1000)),
+    ))
+    .orderBy(desc(passwordResetOtps.createdAt)).limit(5);
+  if (recent.length >= 5 || recent.some((r: { createdAt: Date }) =>
+    now - new Date(r.createdAt).getTime() < 60_000)) {
     return { ok: true };
+  }
 
-  const rawToken = randomBytes(32).toString("hex");
-  const hash = tokenHash(rawToken);
-  const link = new URL("/reset-password", baseUrl);
-  link.searchParams.set("token", rawToken);
-  await db.insert(passwordResetTokens).values({
-    hash, accountId: account.id,
+  const code = randomInt(0, 1_000_000).toString().padStart(6, "0");
+  const [created] = await db.insert(passwordResetOtps).values({
+    accountId: account.id,
+    codeHash: hashPassword(code),
     createdAt: new Date(now),
-    expiresAt: new Date(now + 15 * 60 * 1000),
-  });
+    expiresAt: new Date(now + 10 * 60_000),
+  }).returning({ id: passwordResetOtps.id });
   try {
-    await (sender || sendResetEmail)(email, link.toString());
+    await (sender || sendOtpEmail)(email, code);
   } catch {
-    await db.delete(passwordResetTokens).where(eq(passwordResetTokens.hash, hash));
-    throw new Error("Email pemulihan gagal dikirim. Coba lagi atau hubungi admin.");
+    await db.delete(passwordResetOtps).where(eq(passwordResetOtps.id, created.id));
+    throw new Error("Kode OTP belum dapat dikirim. Periksa pengaturan email atau coba lagi.");
   }
   return { ok: true };
+}
+
+export async function verifyPasswordOtp(input: any, db: any = database()) {
+  const email = validEmail(input);
+  const code = String(input?.code || "").trim();
+  if (!/^\d{6}$/.test(code)) throw new Error("Masukkan kode OTP 6 digit.");
+  const [account] = await db.select({ id: accounts.id, active: accounts.active })
+    .from(accounts).where(eq(accounts.email, email)).limit(1);
+  if (!account?.active) throw new Error("Kode salah atau kedaluwarsa. Minta kode baru.");
+
+  const result = await db.transaction(async (tx: any) => {
+    const [latest] = await tx.select({ id: passwordResetOtps.id })
+      .from(passwordResetOtps)
+      .where(and(
+        eq(passwordResetOtps.accountId, account.id),
+        isNull(passwordResetOtps.usedAt),
+        gt(passwordResetOtps.expiresAt, new Date()),
+      ))
+      .orderBy(desc(passwordResetOtps.createdAt)).limit(1);
+    if (!latest) return { error: "Kode salah atau kedaluwarsa. Minta kode baru." };
+
+    // Row lock and persistent failed-attempt count prevent brute-force.
+    const [otp] = await tx.update(passwordResetOtps)
+      .set({ attempts: sql.raw("attempts + 1") })
+      .where(and(
+        eq(passwordResetOtps.id, latest.id),
+        eq(passwordResetOtps.accountId, account.id),
+        isNull(passwordResetOtps.usedAt),
+        gt(passwordResetOtps.expiresAt, new Date()),
+        lt(passwordResetOtps.attempts, 5),
+      ))
+      .returning({ codeHash: passwordResetOtps.codeHash });
+    if (!otp) return { error: "Terlalu banyak percobaan atau kode kedaluwarsa. Minta kode baru." };
+    if (!verifyPassword(code, otp.codeHash)) return { error: "Kode OTP salah. Periksa email Anda." };
+
+    await tx.update(passwordResetOtps).set({ usedAt: new Date() }).where(eq(passwordResetOtps.id, latest.id));
+    await tx.delete(passwordResetTokens).where(eq(passwordResetTokens.accountId, account.id));
+    const ticket = randomBytes(32).toString("hex");
+    await tx.insert(passwordResetTokens).values({
+      hash: tokenHash(ticket),
+      accountId: account.id,
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 10 * 60_000),
+    });
+    return { ticket };
+  });
+  if ("error" in result) throw new Error(result.error);
+  return result;
 }
 
 export async function confirmPasswordReset(input: any, db: any = database()) {
@@ -74,7 +124,7 @@ export async function confirmPasswordReset(input: any, db: any = database()) {
   const password = String(input?.password || "");
   const confirmation = String(input?.confirmation || "");
   if (!/^[a-f0-9]{64}$/.test(token))
-    throw new Error("Tautan pemulihan tidak valid. Silakan minta tautan baru.");
+    throw new Error("Verifikasi OTP sudah tidak berlaku. Silakan minta kode baru.");
   if (password.length < 8 || password.length > 128)
     throw new Error("Password baru harus 8–128 karakter.");
   if (password !== confirmation)
@@ -83,10 +133,10 @@ export async function confirmPasswordReset(input: any, db: any = database()) {
     const [used] = await tx.delete(passwordResetTokens)
       .where(and(eq(passwordResetTokens.hash, tokenHash(token)), gt(passwordResetTokens.expiresAt, new Date())))
       .returning({ accountId: passwordResetTokens.accountId });
-    if (!used) throw new Error("Tautan sudah digunakan atau kedaluwarsa. Minta tautan baru.");
+    if (!used) throw new Error("Verifikasi sudah digunakan atau kedaluwarsa. Minta kode OTP baru.");
     const [account] = await tx.select({ id: accounts.id, active: accounts.active })
       .from(accounts).where(eq(accounts.id, used.accountId)).limit(1);
-    if (!account?.active) throw new Error("Akun dinonaktifkan. Hubungi pemilik.");
+    if (!account?.active) throw new Error("Akun dinonaktifkan. Hubungi pengelola bimbel.");
     await tx.update(accounts)
       .set({ password: hashPassword(password), failures: 0, lockedUntil: null })
       .where(eq(accounts.id, account.id));
@@ -94,45 +144,4 @@ export async function confirmPasswordReset(input: any, db: any = database()) {
     await tx.delete(passwordResetTokens).where(eq(passwordResetTokens.accountId, account.id));
     return issueSession(tx, account.id);
   });
-}
-
-
-/**
- * Uses a fresh, Google-signed ID token to prove control of the registered
- * Gmail / Workspace address. Returns a short-lived, single-use reset ticket.
- * No email service is needed.
- */
-export async function startGooglePasswordReset(
-  input: any,
-  db: any = database(),
-  verifier: (credential: string) => Promise<{ email: string; sub: string }> = verifyGoogleIdToken,
-) {
-  const identity = await verifier(String(input?.credential || ""));
-  const email = identity.email.trim().toLowerCase();
-  const [account] = await db.select({
-    id: accounts.id,
-    active: accounts.active,
-  }).from(accounts).where(eq(accounts.email, email)).limit(1);
-  if (!account) {
-    throw new Error("Email Google ini belum terdaftar. Pilih akun Google yang digunakan saat mendaftar Bimbel Pro.");
-  }
-  if (!account.active) throw new Error("Akun sedang dinonaktifkan. Hubungi pemilik bimbel.");
-
-  const now = Date.now();
-  const recent = await db.select({
-    createdAt: passwordResetTokens.createdAt,
-  }).from(passwordResetTokens)
-    .where(and(eq(passwordResetTokens.accountId, account.id),
-      gt(passwordResetTokens.createdAt, new Date(now - 60 * 60 * 1000))))
-    .orderBy(desc(passwordResetTokens.createdAt)).limit(6);
-  if (recent.length >= 6) throw new Error("Terlalu banyak percobaan. Coba lagi dalam satu jam.");
-
-  const resetToken = randomBytes(32).toString("hex");
-  await db.insert(passwordResetTokens).values({
-    hash: tokenHash(resetToken),
-    accountId: account.id,
-    createdAt: new Date(now),
-    expiresAt: new Date(now + 10 * 60 * 1000),
-  });
-  return { email, resetToken };
 }

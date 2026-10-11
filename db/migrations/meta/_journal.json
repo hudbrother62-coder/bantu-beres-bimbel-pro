@@ -15,6 +15,13 @@
       "when": 1791720000000,
       "tag": "0001_password_reset",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791730000000,
+      "tag": "0002_password_reset_otp",
+      "breakpoints": true
     }
   ]
 }

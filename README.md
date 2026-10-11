@@ -2,11 +2,17 @@
 
 Web app operasional bimbel dan les privat. Next.js App Router + React + Neon PostgreSQL. **Tidak ada deployment Vercel otomatis.**
 
-## Reset password tanpa OTP via Google
+## Pemulihan password via OTP email
 
-Untuk mengaktifkan pemulihan password tanpa email, buat **OAuth Client ID** bertipe **Web application** di Google Cloud Console > Google Auth Platform. Tambahkan `https://bantu-beres-bimbel-pro.vercel.app` ke **Authorized JavaScript origins** (dan localhost untuk pengujian lokal). Isi Vercel environment variable `GOOGLE_CLIENT_ID` pada Production dengan Client ID yang dihasilkan, kemudian **redeploy**.
+Alur: Lupa password → isi email → masukkan kode OTP enam digit → isi password baru dua kali → langsung masuk. Tidak perlu login Google.
 
-Alur pelanggan: **Lupa password > Lanjutkan dengan Google > buat password baru > otomatis masuk**. Email Google harus cocok persis dengan email akun yang sudah terdaftar, dan backend memverifikasi ID token Google (issuer, audience, masa berlaku, tanda tangan, status email). Pemulihan ini mendukung Gmail serta Google Workspace yang otoritatif. Tautan email tidak digunakan; reset token hanya disimpan sebentar dan satu kali pakai, serta seluruh sesi lama dicabut.
+### Konfigurasi email produksi
+
+Di Vercel Project Settings > Environment Variables tambahkan di Production:
+- RESEND_API_KEY — API key layanan Resend (https://resend.com)
+- PASSWORD_RESET_FROM — alamat pengirim dari domain yang telah diverifikasi di Resend, misalnya "Bimbel Pro <otp@domainanda.com>"
+
+Redeploy setelah kedua variabel tersedia. Tanpa pengirim email yang aktif, aplikasi menampilkan kesalahan jujur dan tidak mengklaim OTP terkirim. Kode berlaku 10 menit, maksimal lima permintaan per jam (jeda satu menit), lima kali tebakan per kode, sekali pakai. Semua sesi sebelumnya dicabut dan browser langsung login setelah password diganti.
 
 ## Fitur
 - Daftar lembaga/pemilik; masuk melalui email atau username tanpa verifikasi email.

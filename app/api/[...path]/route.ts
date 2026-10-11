@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkDatabase, database } from "../../../lib/db";
 import { authenticate, login, logout, register } from "../../../lib/auth";
 import * as svc from "../../../lib/service";
-import { requestPasswordReset, confirmPasswordReset, startGooglePasswordReset } from "../../../lib/password-reset";
+import { requestPasswordOtp, verifyPasswordOtp, confirmPasswordReset } from "../../../lib/password-reset";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 async function handler(
@@ -45,12 +45,6 @@ async function handler(
         );
       }
     }
-    if (req.method === "GET" && path === "auth/google-config") {
-      return NextResponse.json(
-        { configured: Boolean(process.env.GOOGLE_CLIENT_ID), clientId: process.env.GOOGLE_CLIENT_ID || "" },
-        { headers: { "Cache-Control": "no-store" } },
-      );
-    }
     if (!process.env.DATABASE_URL)
       return NextResponse.json(
         {
@@ -75,16 +69,13 @@ async function handler(
       });
       return res;
     }
-    if (req.method === "POST" && path === "auth/google-reset") {
-      const result = await startGooglePasswordReset(input, db);
-      return NextResponse.json(
-        { ok: true, result },
-        { headers: { "Cache-Control": "no-store" } },
-      );
+    if (req.method === "POST" && path === "auth/request-otp") {
+      await requestPasswordOtp(input, db);
+      return NextResponse.json({ ok: true, message: "Jika email terdaftar, kode OTP akan dikirim." }, { headers: { "Cache-Control": "no-store" } });
     }
-    if (req.method === "POST" && path === "auth/request-reset") {
-      await requestPasswordReset(input, db, process.env.APP_URL || req.nextUrl.origin);
-      return NextResponse.json({ ok: true, message: "Jika email terdaftar, tautan pemulihan dikirim." }, { headers: { "Cache-Control": "no-store" } });
+    if (req.method === "POST" && path === "auth/verify-otp") {
+      const result = await verifyPasswordOtp(input, db);
+      return NextResponse.json({ ok: true, result }, { headers: { "Cache-Control": "no-store" } });
     }
     if (req.method === "POST" && path === "auth/confirm-reset") {
       token = await confirmPasswordReset(input, db);
