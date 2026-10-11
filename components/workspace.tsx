@@ -224,6 +224,7 @@ export default function Workspace() {
     [menu, setMenu] = useState(false),
     [busy, setBusy] = useState(false),
     [authMode, setAuthMode] = useState("login"),
+    [resetSent, setResetSent] = useState(false),
     [auth, setAuth] = useState<Data>({}),
     [search, setSearch] = useState(""),
     [archived, setArchived] = useState(false),
@@ -490,12 +491,16 @@ export default function Workspace() {
             <h2>
               {authMode === "login"
                 ? "Selamat datang kembali"
-                : "Mulai kelola bimbel Anda"}
+                : authMode === "forgot"
+                  ? "Pulihkan password"
+                  : "Mulai kelola bimbel Anda"}
             </h2>
             <p>
               {authMode === "login"
                 ? "Masuk ke ruang kerja bimbel Anda."
-                : "Buat akun pemilik dan lembaga baru."}
+                : authMode === "forgot"
+                  ? "Masukkan email yang terdaftar. Kami akan mengirim tautan untuk membuat password baru."
+                  : "Buat akun pemilik dan lembaga baru."}
             </p>
             {!configured && (
               <div className="notice">
@@ -512,16 +517,22 @@ export default function Workspace() {
                 {error}
               </div>
             )}
+            {resetSent && authMode === "forgot" && (
+              <div role="status" className="notice">Jika email terdaftar, tautan pemulihan telah dikirim. Periksa kotak masuk atau folder spam.</div>
+            )}
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 setBusy(true);
                 try {
-                  await api(
-                    "auth/" + (authMode === "login" ? "login" : "register"),
-                    auth,
-                  );
-                  await refresh();
+                  setError("");
+                  if (authMode === "forgot") {
+                    await api("auth/request-reset", { email: auth.email });
+                    setResetSent(true);
+                  } else {
+                    await api("auth/" + (authMode === "login" ? "login" : "register"), auth);
+                    await refresh();
+                  }
                 } catch (e) {
                   setError((e as Error).message);
                 } finally {
@@ -547,57 +558,70 @@ export default function Workspace() {
                   rows={[]}
                 />
               )}
-              <label>
-                {authMode === "login" ? "Email atau username" : ""}
-                {authMode === "login" && (
-                  <input
-                    autoComplete="username"
-                    required
-                    value={auth.identifier || ""}
-                    onChange={(e) =>
-                      setAuth({ ...auth, identifier: e.target.value })
-                    }
-                  />
-                )}
-              </label>
-              <label>
-                {authMode === "login"
-                  ? "Password"
-                  : "Password (minimal 8 karakter)"}
-                <input
-                  type="password"
-                  autoComplete={
-                    authMode === "login" ? "current-password" : "new-password"
-                  }
-                  minLength={authMode === "register" ? 8 : undefined}
-                  required
-                  value={auth.password || ""}
-                  onChange={(e) =>
-                    setAuth({ ...auth, password: e.target.value })
-                  }
-                />
-              </label>
+              {authMode === "forgot" ? (
+                <label>
+                  Email terdaftar
+                  <input type="email" autoComplete="email" required maxLength={200}
+                    value={auth.email || ""}
+                    onChange={(e) => setAuth({ ...auth, email: e.target.value })} />
+                </label>
+              ) : (
+                <>
+                  {authMode === "login" && (
+                    <label>
+                      Email atau username
+                      <input autoComplete="username" required maxLength={200}
+                        value={auth.identifier || ""}
+                        onChange={(e) => setAuth({ ...auth, identifier: e.target.value })} />
+                    </label>
+                  )}
+                  <label>
+                    {authMode === "login" ? "Password" : "Password (minimal 8 karakter)"}
+                    <input type="password"
+                      autoComplete={authMode === "login" ? "current-password" : "new-password"}
+                      minLength={authMode === "register" ? 8 : undefined}
+                      required value={auth.password || ""}
+                      onChange={(e) => setAuth({ ...auth, password: e.target.value })} />
+                  </label>
+                  {authMode === "login" && (
+                    <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+                      <button type="button" className="link"
+                        onClick={() => {
+                          setAuthMode("forgot");
+                          setAuth({ email: String(auth.identifier || "").includes("@") ? auth.identifier : "" });
+                          setResetSent(false);
+                          setError("");
+                        }}>Lupa password?</button>
+                    </div>
+                  )}
+                </>
+              )}
               <button className="primary full" disabled={busy || !configured}>
                 {busy
                   ? "Memproses…"
                   : authMode === "login"
                     ? "Masuk"
-                    : "Daftar bimbel"}
+                    : authMode === "forgot"
+                      ? "Kirim tautan pemulihan"
+                      : "Daftar bimbel"}
               </button>
             </form>
             <p className="auth-switch">
               {authMode === "login"
                 ? "Belum memiliki akun?"
-                : "Sudah memiliki akun?"}{" "}
+                : authMode === "forgot"
+                  ? "Sudah ingat password?"
+                  : "Sudah memiliki akun?"}{" "}
               <button
                 className="link"
                 onClick={() => {
                   setAuthMode(authMode === "login" ? "register" : "login");
                   setAuth({});
+                  setResetSent(false);
                   setError("");
                 }}
               >
-                {authMode === "login" ? "Daftar bimbel" : "Masuk"}
+                {authMode === "login" ? "Daftar bimbel" : "Kembali ke login"}
               </button>
             </p>
             <small>

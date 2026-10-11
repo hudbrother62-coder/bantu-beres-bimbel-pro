@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkDatabase, database } from "../../../lib/db";
 import { authenticate, login, logout, register } from "../../../lib/auth";
 import * as svc from "../../../lib/service";
+import { requestPasswordReset, confirmPasswordReset } from "../../../lib/password-reset";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 async function handler(
@@ -59,6 +60,22 @@ async function handler(
         ? await register(input, db)
         : await login(input, db);
       const res = NextResponse.json({ ok: true });
+      res.cookies.set("bb_session", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 21600,
+      });
+      return res;
+    }
+    if (req.method === "POST" && path === "auth/request-reset") {
+      await requestPasswordReset(input, db, process.env.APP_URL || req.nextUrl.origin);
+      return NextResponse.json({ ok: true, message: "Jika email terdaftar, tautan pemulihan dikirim." }, { headers: { "Cache-Control": "no-store" } });
+    }
+    if (req.method === "POST" && path === "auth/confirm-reset") {
+      token = await confirmPasswordReset(input, db);
+      const res = NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
       res.cookies.set("bb_session", token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",

@@ -75,7 +75,7 @@ export async function register(input: any, db: any = database()) {
     return issueSession(tx, user.id);
   });
 }
-async function issueSession(db: any, accountId: string) {
+export async function issueSession(db: any, accountId: string) {
   const token = randomBytes(32).toString("hex");
   await db
     .insert(sessions)

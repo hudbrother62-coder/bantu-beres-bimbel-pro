@@ -36,6 +36,12 @@ export const sessions = pgTable("auth_sessions", {
     .references(() => accounts.id, { onDelete: "cascade" }),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 });
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  hash: text("hash").primaryKey(),
+  accountId: uuid("account_id").notNull().references(() => accounts.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+}, (t) => [index("reset_account_created").on(t.accountId, t.createdAt)]);
 export const records = pgTable(
   "records",
   {
