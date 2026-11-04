@@ -7,6 +7,7 @@ import {
   canAccess,
   normalizePhone,
   today,
+  selectableReferences,
 } from "../lib/domain";
 test("cicilan dan dispensasi dipisahkan dari kas", () => {
   assert.deepEqual(
@@ -52,3 +53,13 @@ test("nomor lokal menjadi format WA", () =>
   assert.equal(normalizePhone("0812-3456-7890"), "6281234567890"));
 test("tanggal hari ini sesuai Jakarta", () =>
   assert.equal(today(new Date("2026-10-02T18:00:00Z")), "2026-10-03"));
+test("pilihan referensi hanya menampilkan kelas aktif dan terurut", () => {
+  const rows = [
+    { id: "old", kind: "classes", archived: true, data: { name: "Arsip" }, version: 1 },
+    { id: "b", kind: "classes", archived: false, data: { name: "Zeta" }, version: 1 },
+    { id: "a", kind: "classes", archived: false, data: { name: "Alfa" }, version: 1 },
+    { id: "s", kind: "students", archived: false, data: { name: "Rani" }, version: 1 },
+  ];
+  assert.deepEqual(selectableReferences(rows, "classes").map((r) => r.id), ["a", "b"]);
+  assert.deepEqual(selectableReferences(rows, "teachers"), []);
+});

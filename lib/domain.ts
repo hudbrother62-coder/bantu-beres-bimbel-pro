@@ -208,6 +208,18 @@ export const definitions: Record<
     ],
   },
 };
+/** Only active records may appear as choices in reference selectors. */
+export function selectableReferences(rows: Row[], kind: string): Row[] {
+  return rows
+    .filter((row) => row.kind === kind && !row.archived)
+    .sort((a, b) =>
+      String(a.data.name || "").localeCompare(
+        String(b.data.name || ""),
+        "id-ID",
+        { sensitivity: "base" },
+      ),
+    );
+}
 export function canAccess(role: Role, kind: string) {
   return (
     role === "owner" ||

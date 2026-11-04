@@ -44,6 +44,7 @@ import {
   invoiceBalance,
   normalizePhone,
   canAccess,
+  selectableReferences,
 } from "../lib/domain";
 import { downloadExcel, readExcel, templateFor } from "../lib/excel";
 import Modal from "./modal";
@@ -144,27 +145,55 @@ function FormFields({
 }) {
   return (
     <div className="form-grid">
-      {fields.map((f) => (
+      {fields.map((f) => {
+        const choices = f.ref ? selectableReferences(rows, f.ref) : [];
+        return (
         <label className={f.type === "textarea" ? "wide" : ""} key={f.key}>
           {f.label}
           {f.required && <b className="required"> *</b>}
           {f.ref ? (
-            <select
-              required={f.required}
-              value={values[f.key] || ""}
-              onChange={(e) =>
-                setValues({ ...values, [f.key]: e.target.value })
-              }
-            >
-              <option value="">Pilih {f.label.toLowerCase()}</option>
-              {rows
-                .filter((r) => r.kind === f.ref && !r.archived)
-                .map((r) => (
+            <>
+              <select
+                required={f.required}
+                value={values[f.key] || ""}
+                onChange={(e) =>
+                  setValues({ ...values, [f.key]: e.target.value })
+                }
+              >
+                <option value="">
+                  {choices.length ? `Pilih ${f.label.toLowerCase()}` : `Belum ada ${f.label.toLowerCase()}`}
+                </option>
+                {choices.map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.data.name || r.id}
+                    {f.ref === "classes" &&
+                    fields.some((field) => field.key === "studentId") &&
+                    rows.filter(
+                      (enrollment) =>
+                        enrollment.kind === "enrollments" &&
+                        !enrollment.archived &&
+                        enrollment.data.classId === r.id &&
+                        enrollment.data.status === "Aktif",
+                    ).length >= Number(r.data.capacity)
+                      ? " (penuh)"
+                      : ""}
                   </option>
                 ))}
-            </select>
+              </select>
+              {!choices.length && (
+                <small role="status" className="field-hint">
+                  {f.ref === "classes"
+                    ? "Belum ada kelas aktif. Buat kelas terlebih dahulu."
+                    : `Belum ada data ${f.label.toLowerCase()} aktif. Tambahkan datanya terlebih dahulu.`}
+                </small>
+              )}
+              {Boolean(values[f.key]) &&
+                !choices.some((r) => r.id === values[f.key]) && (
+                  <small role="alert" className="field-hint">
+                    Data yang dipilih sudah tidak tersedia. Pilih data aktif.
+                  </small>
+                )}
+            </>
           ) : f.type === "textarea" ? (
             <textarea
               required={f.required}
@@ -209,7 +238,8 @@ function FormFields({
             </>
           )}
         </label>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -241,7 +271,11 @@ export default function Workspace() {
     [payment, setPayment] = useState<Row | null>(null),
     [receipt, setReceipt] = useState<Row | null>(null),
     [reason, setReason] = useState(""),
-    [settings, setSettings] = useState<Data>({});
+    [settings, setSettings] = useState<Data>({}),
+    [resumeEnrollment, setResumeEnrollment] = useState<{
+      form: any;
+      values: Data;
+    } | null>(null);
   const refresh = useCallback(async () => {
     try {
       const s = await api("state?month=" + month);
@@ -342,6 +376,16 @@ export default function Workspace() {
     );
     setForm({ kind, row });
     setError("");
+  }
+  function closeEditor() {
+    if (resumeEnrollment && form?.kind === "classes") {
+      setForm(resumeEnrollment.form);
+      setValues(resumeEnrollment.values);
+      setResumeEnrollment(null);
+    } else {
+      setForm(null);
+      setResumeEnrollment(null);
+    }
   }
   const showValue = (f: Field, data: Data) =>
     f.ref
@@ -2476,14 +2520,14 @@ export default function Workspace() {
                 (definitions[form.kind]?.singular || "data")
           }
           onClose={() => {
-            if (!busy) setForm(null);
+            if (!busy) closeEditor();
           }}
         >
           <form
             onSubmit={async (e) => {
               e.preventDefault();
               try {
-                await run(() =>
+                const saved = await run(() =>
                   api(
                     form.kind === "accounts" ? "accounts" : "records",
                     form.kind === "accounts"
@@ -2496,11 +2540,85 @@ export default function Workspace() {
                         },
                   ),
                 );
-                setForm(null);
+                if (form.kind === "classes" && resumeEnrollment) {
+                  setValues({ ...resumeEnrollment.values, classId: saved.id });
+                  setForm(resumeEnrollment.form);
+                  setResumeEnrollment(null);
+                } else {
+                  setForm(null);
+                }
               } catch {}
             }}
           >
             {error && <div className="alert">{error}</div>}
+            {form.kind === "enrollments" &&
+              selectableReferences(rows, "classes").length === 0 && (
+                <div className="notice" role="status">
+                  <strong>Belum ada kelas yang bisa dipilih.</strong>
+                  <p>
+                    Buat kelas terlebih dahulu agar siswa dapat didaftarkan.
+                    Data siswa yang sudah dipilih tidak akan hilang saat membuat kelas.
+                  </p>
+                  <div className="row-actions">
+                    {kindRows("programs").length > 0 &&
+                    kindRows("teachers").length > 0 ? (
+                      <button
+                        type="button"
+                        className="soft"
+                        disabled={busy}
+                        onClick={() => {
+                          setResumeEnrollment({
+                            form,
+                            values: { ...values },
+                          });
+                          add("classes");
+                        }}
+                      >
+                        <Plus size={16} /> Tambah kelas sekarang
+                      </button>
+                    ) : user.role === "owner" ? (
+                      <>
+                        {kindRows("programs").length === 0 && (
+                          <button
+                            type="button"
+                            className="soft"
+                            onClick={() => {
+                              closeEditor();
+                              go("programs");
+                            }}
+                          >
+                            Buat program dahulu
+                          </button>
+                        )}
+                        {kindRows("teachers").length === 0 && (
+                          <button
+                            type="button"
+                            className="soft"
+                            onClick={() => {
+                              closeEditor();
+                              go("teachers");
+                            }}
+                          >
+                            Tambah pengajar dahulu
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      <small>
+                        Minta pemilik bimbel melengkapi data Program dan Pengajar.
+                      </small>
+                    )}
+                    <button
+                      type="button"
+                      className="soft"
+                      disabled={busy}
+                      onClick={() => refresh()}
+                    >
+                      <RefreshCw size={16} /> Muat ulang kelas
+                    </button>
+                  </div>
+                </div>
+              )}
             <FormFields
               fields={
                 form.kind === "accounts"
@@ -2547,11 +2665,18 @@ export default function Workspace() {
                 type="button"
                 className="soft"
                 disabled={busy}
-                onClick={() => setForm(null)}
+                onClick={closeEditor}
               >
                 Batal
               </button>
-              <button className="primary" disabled={busy}>
+              <button
+                className="primary"
+                disabled={
+                  busy ||
+                  (form.kind === "enrollments" &&
+                    selectableReferences(rows, "classes").length === 0)
+                }
+              >
                 {busy ? "Menyimpan…" : "Simpan"}
               </button>
             </div>
