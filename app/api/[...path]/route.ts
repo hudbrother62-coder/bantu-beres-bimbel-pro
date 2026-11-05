@@ -14,9 +14,10 @@ async function handler(
   try {
     if (req.method !== "GET") {
       const origin = req.headers.get("origin");
-      const expected = process.env.APP_URL
-        ? new URL(process.env.APP_URL).origin
-        : req.nextUrl.origin;
+      // Check the origin against the hostname actually serving this request.
+      // APP_URL can point to the canonical domain while Vercel serves valid aliases.
+      // Requiring both to match would reject sign-in and password recovery on aliases.
+      const expected = req.nextUrl.origin;
       if (!origin || origin !== expected)
         return NextResponse.json(
           { error: "Asal permintaan ditolak. Periksa APP_URL." },

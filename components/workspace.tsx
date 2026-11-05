@@ -562,7 +562,7 @@ export default function Workspace() {
               </div>
             )}
             {authMode === "forgot" ? (
-              <OtpPasswordRecovery />
+              <OtpPasswordRecovery initialEmail={String(auth.email || "")} />
             ) : (
             <form
               onSubmit={async (e) => {

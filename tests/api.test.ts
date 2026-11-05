@@ -9,3 +9,27 @@ test('API mendeteksi database kosong dan menolak permintaan dari domain lain',as
  const noDb=await POST(new NextRequest('http://localhost:3000/api/auth/register',{method:'POST',headers:{origin:'http://localhost:3000'},body:'{}'}),{params:Promise.resolve({path:['auth','register']})});assert.equal(noDb.status,503);
  }finally{if(old)process.env.DATABASE_URL=old;}
 });
+
+test('API mengizinkan domain deployment sendiri walau APP_URL memakai domain utama', async () => {
+  const oldDb = process.env.DATABASE_URL;
+  const oldUrl = process.env.APP_URL;
+  delete process.env.DATABASE_URL;
+  process.env.APP_URL = 'https://bantu-beres-bimbel-pro.vercel.app';
+  const alias = 'https://bantu-beres-bimbel-pro-hudbrother62-2859.vercel.app';
+  try {
+    const own = await POST(new NextRequest(alias + '/api/auth/login', {
+      method: 'POST', headers: { origin: alias }, body: '{}',
+    }), { params: Promise.resolve({ path: ['auth', 'login'] }) });
+    assert.equal(own.status, 503);
+
+    const other = await POST(new NextRequest(alias + '/api/auth/login', {
+      method: 'POST', headers: { origin: 'https://example-attacker.test' }, body: '{}',
+    }), { params: Promise.resolve({ path: ['auth', 'login'] }) });
+    assert.equal(other.status, 403);
+  } finally {
+    if (oldDb === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = oldDb;
+    if (oldUrl === undefined) delete process.env.APP_URL;
+    else process.env.APP_URL = oldUrl;
+  }
+});

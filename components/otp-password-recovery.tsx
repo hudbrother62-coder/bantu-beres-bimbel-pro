@@ -13,9 +13,9 @@ async function post(path: string, payload: Record<string, unknown>) {
   if (!response.ok) throw new Error(body.error || "Permintaan gagal. Silakan coba lagi.");
   return body.result || body;
 }
-export default function OtpPasswordRecovery() {
+export default function OtpPasswordRecovery({ initialEmail = "" }: { initialEmail?: string }) {
   const [stage, setStage] = useState<Stage>("email");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(initialEmail.trim().toLowerCase());
   const [code, setCode] = useState("");
   const [ticket, setTicket] = useState("");
   const [password, setPassword] = useState("");
