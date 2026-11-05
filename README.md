@@ -12,7 +12,7 @@ Di Vercel Project Settings > Environment Variables tambahkan di Production:
 - RESEND_API_KEY — API key layanan Resend (https://resend.com)
 - PASSWORD_RESET_FROM — alamat pengirim dari domain yang telah diverifikasi di Resend, misalnya "Bimbel Pro <otp@domainanda.com>"
 
-Redeploy setelah kedua variabel tersedia. Tanpa pengirim email yang aktif, aplikasi menampilkan kesalahan jujur dan tidak mengklaim OTP terkirim. Kode berlaku 10 menit, maksimal lima permintaan per jam (jeda satu menit), lima kali tebakan per kode, sekali pakai. Semua sesi sebelumnya dicabut dan browser langsung login setelah password diganti.
+Redeploy setelah kedua variabel tersedia. Resend juga dapat dipasang dari Vercel Marketplace dengan domain yang memenuhi persyaratannya: https://resend.com/vercel. Pastikan domain pengirim sudah diverifikasi. Tanpa pengirim email yang aktif, aplikasi menampilkan kesalahan jujur dan tidak mengklaim OTP terkirim. API Resend yang menerima permintaan belum menjamin email tiba di kotak masuk; pantau status pengiriman, SPF/DKIM, dan spam melalui Resend. Bila Resend sibuk, request dicoba ulang dengan idempotency key yang sama; tombol kirim ulang OTP terkunci 60 detik untuk menghindari permintaan ganda. Kode berlaku 10 menit, maksimal lima permintaan per jam (jeda satu menit), lima kali tebakan per kode, sekali pakai. Semua sesi sebelumnya dicabut dan browser langsung login setelah password diganti.
 
 ## Fitur
 - Daftar lembaga/pemilik; masuk melalui email atau username tanpa verifikasi email.

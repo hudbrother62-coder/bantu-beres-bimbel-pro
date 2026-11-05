@@ -13,24 +13,51 @@ function validEmail(input: any) {
   return email;
 }
 
-async function sendOtpEmail(address: string, code: string) {
+// Only a confirmed Resend API acceptance counts as success. Retrying a
+// transient failure reuses the same idempotency key so an OTP is never emailed
+// twice if the provider accepted a request before a timeout.
+export async function sendOtpEmail(address: string, code: string) {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.PASSWORD_RESET_FROM;
   if (!apiKey || !from)
     throw new Error("Pengiriman OTP belum dikonfigurasi. Hubungi pengelola Bimbel Pro.");
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: "Bearer " + apiKey, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      from,
-      to: [address],
-      subject: "Kode pemulihan password Bantu Beres Bimbel Pro",
-      text: "Kode OTP Bimbel Pro Anda: " + code +
-        "\n\nKode berlaku 10 menit dan hanya dapat digunakan satu kali. Jangan bagikan kepada siapa pun. Jika Anda tidak meminta kode, abaikan email ini.",
-    }),
-    signal: AbortSignal.timeout(12000),
+
+  const requestBody = JSON.stringify({
+    from,
+    to: [address],
+    subject: "Kode pemulihan password Bantu Beres Bimbel Pro",
+    text: "Kode OTP Bimbel Pro Anda: " + code +
+      "\n\nKode berlaku 10 menit dan hanya dapat digunakan satu kali. Jangan bagikan kepada siapa pun. Jika Anda tidak meminta kode, abaikan email ini.",
   });
-  if (!response.ok) throw new Error("Email OTP gagal dikirim. Periksa konfigurasi pengirim.");
+  const idempotencyKey = "bimbel-otp-" + randomBytes(16).toString("hex");
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let response: Response | null = null;
+    try {
+      response = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + apiKey,
+          "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey,
+        },
+        body: requestBody,
+        signal: AbortSignal.timeout(8000),
+      });
+    } catch {
+      if (attempt === 2) throw new Error("Layanan email sedang tidak merespons. Coba lagi nanti.");
+    }
+    if (response?.ok) {
+      const receipt: unknown = await response.json().catch(() => null);
+      if (receipt && typeof receipt === "object" && "id" in receipt &&
+        typeof receipt.id === "string" && receipt.id.length > 0) return;
+      throw new Error("Layanan email belum mengonfirmasi pengiriman OTP. Coba lagi nanti.");
+    }
+    if (response && response.status !== 429 && response.status !== 409 &&
+      response.status < 500)
+      throw new Error("Email OTP ditolak penyedia email. Periksa API key dan domain pengirim.");
+    if (attempt === 2) throw new Error("Layanan email sedang sibuk. Coba lagi nanti.");
+    await new Promise<void>(resolve => setTimeout(resolve, 300 * (attempt + 1)));
+  }
 }
 
 export async function requestPasswordOtp(input: any, db: any = database(), sender?: OtpSender) {

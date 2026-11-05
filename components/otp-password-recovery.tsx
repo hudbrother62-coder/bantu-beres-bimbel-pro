@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, CheckCircle2, KeyRound, Mail, ShieldCheck } from "lucide-react";
 
 type Stage = "email" | "code" | "password";
@@ -23,6 +23,12 @@ export default function OtpPasswordRecovery({ initialEmail = "", emailAvailable 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [resendAfter, setResendAfter] = useState(0);
+  useEffect(() => {
+    if (resendAfter === 0) return;
+    const timeout = setTimeout(() => setResendAfter(value => Math.max(0, value - 1)), 1000);
+    return () => clearTimeout(timeout);
+  }, [resendAfter]);
 
   async function execute(callback: () => Promise<void>) {
     setBusy(true);
@@ -37,7 +43,8 @@ export default function OtpPasswordRecovery({ initialEmail = "", emailAvailable 
       await post("request-otp", { email: email.trim().toLowerCase() });
       setStage("code");
       setCode("");
-      setNotice("Jika email terdaftar, kode OTP 6 digit telah dikirim. Periksa kotak masuk dan spam.");
+      setResendAfter(60);
+      setNotice("Jika email terdaftar, permintaan OTP diterima penyedia email. Periksa kotak masuk dan spam.");
     });
   }
   async function verifyOtp() {
@@ -103,8 +110,10 @@ export default function OtpPasswordRecovery({ initialEmail = "", emailAvailable 
               onClick={() => { setStage("email"); setError(""); setNotice(""); }}>
               <ArrowLeft size={15} /> Ubah email
             </button>
-            <button type="button" className="link" disabled={busy}
-              onClick={() => { void requestOtp(); }}>Kirim ulang OTP</button>
+            <button type="button" className="link" disabled={busy || resendAfter > 0}
+              onClick={() => { void requestOtp(); }}>
+              {resendAfter > 0 ? `Kirim ulang dalam ${resendAfter} dtk` : "Kirim ulang OTP"}
+            </button>
           </div>
         </form>
       )}

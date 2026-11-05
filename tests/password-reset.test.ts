@@ -5,7 +5,7 @@ import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import * as schema from "../db/schema";
 import { register, authenticate, login } from "../lib/auth";
-import { requestPasswordOtp, verifyPasswordOtp, confirmPasswordReset } from "../lib/password-reset";
+import { requestPasswordOtp, verifyPasswordOtp, confirmPasswordReset, sendOtpEmail } from "../lib/password-reset";
 
 test("OTP email -> password baru -> login langsung dan sesi lama tidak berlaku", async () => {
   const pg = new PGlite(), db = drizzle(pg, { schema });
@@ -84,4 +84,56 @@ test("tautan admin sekali pakai memulihkan akun tanpa pengiriman OTP", async () 
     }, db), /salah/);
     assert.ok(await login({ identifier: "supportqa", password: "NewPassword123!" }, db));
   } finally { await pg.close(); }
+});
+
+test("Resend menerima OTP dengan idempotency key yang tetap saat retry", async () => {
+  const priorKey = process.env.RESEND_API_KEY;
+  const priorFrom = process.env.PASSWORD_RESET_FROM;
+  const priorFetch = globalThis.fetch;
+  process.env.RESEND_API_KEY = "re-test-local-only";
+  process.env.PASSWORD_RESET_FROM = "Bimbel Pro <otp@example.test>";
+  const calls: Array<{ key: string; body: string }> = [];
+  globalThis.fetch = async (_url, options) => {
+    const headers = options?.headers as Record<string, string>;
+    calls.push({ key: headers["Idempotency-Key"], body: String(options?.body) });
+    return calls.length === 1
+      ? new Response(JSON.stringify({ message: "temporarily unavailable" }), { status: 503 })
+      : new Response(JSON.stringify({ id: "email-accepted-by-resend" }), { status: 200 });
+  };
+  try {
+    await sendOtpEmail("owner@example.test", "123456");
+    assert.equal(calls.length, 2);
+    assert.ok(calls[0].key.startsWith("bimbel-otp-"));
+    assert.equal(calls[0].key, calls[1].key, "retry tidak boleh mengirim dua email berbeda");
+    assert.equal(calls[0].body, calls[1].body);
+  } finally {
+    globalThis.fetch = priorFetch;
+    if (priorKey === undefined) delete process.env.RESEND_API_KEY;
+    else process.env.RESEND_API_KEY = priorKey;
+    if (priorFrom === undefined) delete process.env.PASSWORD_RESET_FROM;
+    else process.env.PASSWORD_RESET_FROM = priorFrom;
+  }
+});
+
+test("Resend menolak konfigurasi salah tanpa retry atau klaim OTP terkirim", async () => {
+  const priorKey = process.env.RESEND_API_KEY;
+  const priorFrom = process.env.PASSWORD_RESET_FROM;
+  const priorFetch = globalThis.fetch;
+  process.env.RESEND_API_KEY = "re-test-local-only";
+  process.env.PASSWORD_RESET_FROM = "Bimbel Pro <otp@example.test>";
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    return new Response(JSON.stringify({ name: "validation_error" }), { status: 403 });
+  };
+  try {
+    await assert.rejects(() => sendOtpEmail("owner@example.test", "123456"), /ditolak penyedia email/);
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = priorFetch;
+    if (priorKey === undefined) delete process.env.RESEND_API_KEY;
+    else process.env.RESEND_API_KEY = priorKey;
+    if (priorFrom === undefined) delete process.env.PASSWORD_RESET_FROM;
+    else process.env.PASSWORD_RESET_FROM = priorFrom;
+  }
 });
