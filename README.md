@@ -88,3 +88,16 @@ Cookie sesi HttpOnly/SameSite, 6 jam. Password scrypt dengan salt acak. Salah pa
 5. Isi Environment Variables production: `DATABASE_URL` (pooled) dan `APP_URL` (URL production final tanpa slash akhir). Jangan membuat `NEXT_PUBLIC_DATABASE_URL`.
 6. Setelah deploy buka `/api/health`. Kondisi sehat: `configured: true`, `connected: true`, `migrated: true`.
 7. Baru setelah health sehat, daftar akun owner pertama dan lakukan smoke test: login → program → pengajar → kelas → siswa → pendaftaran → presensi → tagihan → pembayaran → kuitansi → laporan.
+
+## Pemulihan darurat melalui chat customer yang sudah diverifikasi
+
+Jika layanan OTP belum dikonfigurasi, pengelola teknis dapat menerbitkan tautan pemulihan tanpa mengetahui password lama. Jalankan perintah ini hanya dari perangkat atau console admin terpercaya, **setelah memverifikasi bahwa customer benar-benar pemilik akun melalui kanal komunikasi yang sudah ada**:
+
+```bash
+npm run support:reset -- customer@example.com
+```
+
+Script memerlukan `DATABASE_URL_UNPOOLED` (atau `DATABASE_URL`) dan `APP_URL` yang benar. Pastikan koneksi menunjuk ke **branch database yang berisi akun customer**, bukan asal menggunakan default Neon: pada proyek ini terdapat beberapa branch. Script menolak akun yang tidak ada atau tidak aktif. Tautan berlaku 60 menit, sekali pakai, token 256-bit disimpan di database hanya sebagai hash. URL memakai fragment (`#token`) agar token tidak terkirim sebagai URL server atau referrer. Jangan unggah ke tiket publik, log bersama, maupun grup; kirim lewat percakapan privat resmi dengan pemilik akun yang terverifikasi.
+
+Customer membuka tautan, membuat password baru, lalu otomatis login. Semua sesi lama dicabut. Jika email OTP tersedia, reset biasa pada halaman login tetap disarankan. Endpoint `/api/health` menyediakan `passwordResetAvailable` (boolean, tanpa secret) untuk memeriksa kesiapan penyedia email.
+
