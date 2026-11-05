@@ -247,6 +247,7 @@ export default function Workspace() {
   const [state, setState] = useState<any>(null),
     [loading, setLoading] = useState(true),
     [configured, setConfigured] = useState(false),
+    [otpEmailReady, setOtpEmailReady] = useState(false),
     [error, setError] = useState(""),
     [toast, setToast] = useState(""),
     [month, setMonth] = useState(today().slice(0, 7)),
@@ -295,6 +296,7 @@ export default function Workspace() {
       .then((h) => {
         const ready = Boolean(h.configured && h.connected && h.migrated);
         setConfigured(ready);
+        setOtpEmailReady(Boolean(h.passwordResetAvailable));
         if (ready) refresh();
         else {
           setError(
@@ -562,7 +564,7 @@ export default function Workspace() {
               </div>
             )}
             {authMode === "forgot" ? (
-              <OtpPasswordRecovery initialEmail={String(auth.email || "")} />
+              <OtpPasswordRecovery initialEmail={String(auth.email || "")} emailAvailable={otpEmailReady} />
             ) : (
             <form
               onSubmit={async (e) => {
