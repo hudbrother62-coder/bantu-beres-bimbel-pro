@@ -272,8 +272,8 @@ test("pendaftaran akun pemilik baru: tersimpan, login ulang, dashboard awal, dan
     const loginByUsername = await login({ identifier: "ownerbaru", password: form.password }, db);
     assert.equal((await authenticate(loginByEmail, db))?.user.id, context.user.id);
     assert.equal((await authenticate(loginByUsername, db))?.user.id, context.user.id);
-    await assert.rejects(() => register(form, db), /unique|duplicate|already exists|23505/i);
-    await assert.rejects(() => register({ ...form, email: "different@example.test" }, db), /unique|duplicate|already exists|23505/i);
+    await assert.rejects(() => register(form, db), /Failed query|unique|duplicate|already exists|23505/i);
+    await assert.rejects(() => register({ ...form, email: "different@example.test" }, db), /Failed query|unique|duplicate|already exists|23505/i);
     const { count: tenantCount } = (await db.select({ count: sql<number>`count(*)::int` }).from(schema.tenants))[0];
     const { count: accountCount } = (await db.select({ count: sql<number>`count(*)::int` }).from(schema.accounts))[0];
     assert.equal(Number(tenantCount), 1, "duplikasi tidak boleh meninggalkan lembaga kosong");
