@@ -569,13 +569,38 @@ export default function Workspace() {
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
+                if (busy) return;
+                const mode = authMode;
+                const email = String(auth.email || "").trim().toLowerCase();
+                let saved = false;
                 setBusy(true);
+                setError("");
                 try {
-                  setError("");
-                  await api("auth/" + (authMode === "login" ? "login" : "register"), auth);
-                  await refresh();
+                  if (mode === "register" && auth.password !== auth.confirmPassword)
+                    throw new Error("Konfirmasi password tidak sama. Periksa kembali password Anda.");
+                  // First commit the owner, tenant and session on the server.
+                  await api("auth/" + (mode === "login" ? "login" : "register"), auth);
+                  saved = true;
+                  // Never claim that sign-up/sign-in worked until the cookie is accepted.
+                  const session = await api("state?month=" + month);
+                  if (!session?.user || !session?.tenant ||
+                    (mode === "register" && session.user.email !== email))
+                    throw new Error("Sesi akun belum berhasil diverifikasi.");
+                  setState(session);
+                  setSettings({ name: session.tenant.name, ...session.tenant.settings });
+                  setAuth({});
                 } catch (e) {
-                  setError((e as Error).message);
+                  setState(null);
+                  if (saved && mode === "register") {
+                    // The registration request succeeded: do not encourage a duplicate signup.
+                    setAuthMode("login");
+                    setAuth({ identifier: email });
+                    setError("Akun berhasil dibuat, tetapi sesi belum aktif. Silakan masuk menggunakan email dan password yang baru didaftarkan. Jangan mendaftar ulang.");
+                  } else if (saved) {
+                    setError("Login belum bisa diverifikasi. Coba muat ulang halaman atau masuk kembali.");
+                  } else {
+                    setError((e as Error).message);
+                  }
                 } finally {
                   setBusy(false);
                 }
@@ -613,9 +638,25 @@ export default function Workspace() {
                     <input type="password"
                       autoComplete={authMode === "login" ? "current-password" : "new-password"}
                       minLength={authMode === "register" ? 8 : undefined}
+                      maxLength={128}
                       required value={auth.password || ""}
                       onChange={(e) => setAuth({ ...auth, password: e.target.value })} />
                   </label>
+                  {authMode === "register" && (
+                    <>
+                      <label>
+                        Konfirmasi password
+                        <input type="password" autoComplete="new-password"
+                          minLength={8} maxLength={128} required
+                          value={auth.confirmPassword || ""}
+                          onChange={(e) => setAuth({ ...auth, confirmPassword: e.target.value })} />
+                      </label>
+                      <small className="field-hint" style={{ display: "block", marginBottom: 16 }}>
+                        Username: 3–40 karakter (huruf, angka, titik, garis bawah atau strip).
+                        Akun langsung aktif setelah pendaftaran berhasil, tanpa verifikasi email.
+                      </small>
+                    </>
+                  )}
                   {authMode === "login" && (
                     <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
                       <button type="button" className="link"

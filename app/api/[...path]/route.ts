@@ -159,26 +159,23 @@ async function handler(
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (e: any) {
-    const known = String(e.message);
-    const status =
-      known === "DATABASE_NOT_CONFIGURED"
-        ? 503
-        : known.includes("Akses")
-          ? 403
-          : 400;
-    return NextResponse.json(
-      {
-        error:
-          e.code === "23505"
-            ? "Email, username, atau data ini sudah terdaftar."
-            : e.code
-              ? "Database tidak dapat memproses permintaan. Periksa koneksi dan migrasi."
-              : known === "DATABASE_NOT_CONFIGURED"
-                ? "Database belum terhubung."
-                : known,
-      },
-      { status },
-    );
+    const known = e instanceof Error ? e.message : "Permintaan tidak berhasil.";
+    const duplicate = e?.code === "23505";
+    const constraint = String(e?.constraint || "");
+    const status = duplicate ? 409 : known === "DATABASE_NOT_CONFIGURED" ? 503 :
+      known.includes("Akses") ? 403 : 400;
+    const message = duplicate
+      ? constraint.includes("accounts_email")
+        ? "Email sudah terdaftar. Silakan masuk atau gunakan Lupa Password."
+        : constraint.includes("accounts_username")
+          ? "Username sudah digunakan. Coba username lain."
+          : "Email atau username sudah terdaftar. Silakan masuk atau gunakan data lain."
+      : e?.code
+        ? "Database tidak dapat memproses permintaan. Periksa koneksi dan migrasi."
+        : known === "DATABASE_NOT_CONFIGURED"
+          ? "Database belum terhubung."
+          : known;
+    return NextResponse.json({ error: message }, { status });
   }
 }
 export const GET = handler;

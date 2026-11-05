@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
+import { sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/pglite/migrator";
 import * as schema from "../db/schema";
 import { register, authenticate, login } from "../lib/auth";
@@ -243,4 +244,41 @@ test("alur bimbel dengan PostgreSQL: CRUD, presensi, billing, isolasi dan role",
       JSON.stringify(await snapshot(db, u, month)),
     );
   await pg.close();
+});
+
+test("pendaftaran akun pemilik baru: tersimpan, login ulang, dashboard awal, dan duplikasi aman", async () => {
+  const pg = new PGlite();
+  const db = drizzle(pg, { schema });
+  try {
+    await migrate(db, { migrationsFolder: "./db/migrations" });
+    const form = {
+      name: "Pemilik Baru",
+      business: "Bimbel Mandiri",
+      email: "  OWNER.BARU@EXAMPLE.TEST ",
+      username: " OwnerBaru ",
+      password: "PasswordPanjang123!",
+    };
+    const token = await register(form, db);
+    const context = await authenticate(token, db);
+    assert.ok(context, "sesi pertama pendaftaran harus aktif");
+    assert.equal(context.user.email, "owner.baru@example.test");
+    assert.equal(context.user.username, "ownerbaru");
+    assert.equal(context.user.role, "owner");
+    assert.equal(context.tenant.name, "Bimbel Mandiri");
+    const firstPage = await snapshot(db, context.user, today().slice(0, 7));
+    assert.equal(firstPage.rows.length, 0, "dashboard bimbel baru harus dapat diakses");
+    assert.equal(firstPage.accounts.length, 1);
+    const loginByEmail = await login({ identifier: "OWNER.BARU@EXAMPLE.TEST", password: form.password }, db);
+    const loginByUsername = await login({ identifier: "ownerbaru", password: form.password }, db);
+    assert.equal((await authenticate(loginByEmail, db))?.user.id, context.user.id);
+    assert.equal((await authenticate(loginByUsername, db))?.user.id, context.user.id);
+    await assert.rejects(() => register(form, db), /unique|duplicate|already exists|23505/i);
+    await assert.rejects(() => register({ ...form, email: "different@example.test" }, db), /unique|duplicate|already exists|23505/i);
+    const { count: tenantCount } = (await db.select({ count: sql<number>`count(*)::int` }).from(schema.tenants))[0];
+    const { count: accountCount } = (await db.select({ count: sql<number>`count(*)::int` }).from(schema.accounts))[0];
+    assert.equal(Number(tenantCount), 1, "duplikasi tidak boleh meninggalkan lembaga kosong");
+    assert.equal(Number(accountCount), 1, "duplikasi tidak boleh membuat akun baru");
+  } finally {
+    await pg.close();
+  }
 });
