@@ -52,3 +52,36 @@ test("OTP salah lima kali diblokir", async () => {
     await assert.rejects(() => verifyPasswordOtp({ email: "qa@example.test", code }, db), /Terlalu banyak/);
   } finally { await pg.close(); }
 });
+
+test("tautan admin sekali pakai memulihkan akun tanpa pengiriman OTP", async () => {
+  const { randomBytes } = await import("node:crypto");
+  const { eq } = await import("drizzle-orm");
+  const { tokenHash } = await import("../lib/auth");
+  const pg = new PGlite(), db = drizzle(pg, { schema });
+  try {
+    await migrate(db, { migrationsFolder: "./db/migrations" });
+    const oldSession = await register({
+      name: "Pemilik", email: "support-qa@example.test",
+      username: "supportqa", password: "OldPassword123!", business: "Bimbel Uji",
+    }, db);
+    const [account] = await db.select({ id: schema.accounts.id })
+      .from(schema.accounts).where(eq(schema.accounts.email, "support-qa@example.test"));
+    const oneTimeToken = randomBytes(32).toString("hex");
+    await db.insert(schema.passwordResetTokens).values({
+      accountId: account.id, hash: tokenHash(oneTimeToken),
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+    const newSession = await confirmPasswordReset({
+      token: oneTimeToken, password: "NewPassword123!", confirmation: "NewPassword123!",
+    }, db);
+    assert.ok(await authenticate(newSession, db));
+    assert.equal(await authenticate(oldSession, db), null);
+    await assert.rejects(() => confirmPasswordReset({
+      token: oneTimeToken, password: "SomePassword123!", confirmation: "SomePassword123!",
+    }, db), /digunakan|kedaluwarsa/);
+    await assert.rejects(() => login({
+      identifier: "supportqa", password: "OldPassword123!",
+    }, db), /salah/);
+    assert.ok(await login({ identifier: "supportqa", password: "NewPassword123!" }, db));
+  } finally { await pg.close(); }
+});
