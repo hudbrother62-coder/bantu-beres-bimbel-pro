@@ -10,6 +10,7 @@
     "db:migrate": "node --import tsx db/migrate.ts",
     "typecheck": "tsc --noEmit",
     "db:check": "node --import tsx db/check.ts",
+    "support:reset": "node --import tsx scripts/issue-support-reset.ts",
     "verify": "npm test && npm run typecheck && npm run build"
   },
   "dependencies": {
