@@ -33,3 +33,27 @@ test('API mengizinkan domain deployment sendiri walau APP_URL memakai domain uta
     else process.env.APP_URL = oldUrl;
   }
 });
+
+test("health melaporkan kesiapan OTP tanpa mengekspos API key", async () => {
+  const oldDb = process.env.DATABASE_URL;
+  const oldKey = process.env.RESEND_API_KEY;
+  const oldSender = process.env.PASSWORD_RESET_FROM;
+  delete process.env.DATABASE_URL;
+  process.env.RESEND_API_KEY = "dummy-unit-test";
+  process.env.PASSWORD_RESET_FROM = "Bimbel <test@example.test>";
+  try {
+    const response = await GET(new NextRequest("http://localhost:3000/api/health"), {
+      params: Promise.resolve({ path: ["health"] }),
+    });
+    const result = await response.json();
+    assert.equal(result.passwordResetAvailable, true);
+    assert.equal(JSON.stringify(result).includes("dummy-unit-test"), false);
+  } finally {
+    if (oldDb === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = oldDb;
+    if (oldKey === undefined) delete process.env.RESEND_API_KEY;
+    else process.env.RESEND_API_KEY = oldKey;
+    if (oldSender === undefined) delete process.env.PASSWORD_RESET_FROM;
+    else process.env.PASSWORD_RESET_FROM = oldSender;
+  }
+});
