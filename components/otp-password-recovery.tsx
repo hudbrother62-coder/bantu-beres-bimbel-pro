@@ -13,7 +13,7 @@ async function post(path: string, payload: Record<string, unknown>) {
   if (!response.ok) throw new Error(body.error || "Permintaan gagal. Silakan coba lagi.");
   return body.result || body;
 }
-export default function OtpPasswordRecovery({ initialEmail = "" }: { initialEmail?: string }) {
+export default function OtpPasswordRecovery({ initialEmail = "", emailAvailable = true }: { initialEmail?: string; emailAvailable?: boolean }) {
   const [stage, setStage] = useState<Stage>("email");
   const [email, setEmail] = useState(initialEmail.trim().toLowerCase());
   const [code, setCode] = useState("");
@@ -59,10 +59,16 @@ export default function OtpPasswordRecovery({ initialEmail = "" }: { initialEmai
   }
   return (
     <div>
-      <div className="notice" style={{ marginBottom: 18, display: "flex", alignItems: "flex-start", gap: 10 }}>
-        <ShieldCheck size={20} aria-hidden="true" />
-        <span>Kode OTP dikirim ke email terdaftar. Berlaku 10 menit dan hanya bisa digunakan satu kali.</span>
-      </div>
+      {emailAvailable ? (
+        <div className="notice" style={{ marginBottom: 18, display: "flex", alignItems: "flex-start", gap: 10 }}>
+          <ShieldCheck size={20} aria-hidden="true" />
+          <span>Kode OTP dikirim ke email terdaftar. Berlaku 10 menit dan hanya bisa digunakan satu kali.</span>
+        </div>
+      ) : (
+        <div role="alert" className="alert" style={{ marginBottom: 18 }}>
+          Pemulihan melalui email belum tersedia. Hubungi layanan customer Bimbel Pro melalui chat resmi untuk mendapatkan tautan reset password sekali pakai. Jangan kirim password lama atau kode OTP.
+        </div>
+      )}
       {error && <div role="alert" className="alert">{error}</div>}
       {notice && <div role="status" className="notice" style={{ marginBottom: 15 }}>
         <CheckCircle2 size={18} aria-hidden="true" /> {notice}
@@ -74,7 +80,7 @@ export default function OtpPasswordRecovery({ initialEmail = "" }: { initialEmai
               placeholder="nama@gmail.com" value={email}
               onChange={(e) => setEmail(e.target.value)} />
           </label>
-          <button type="submit" className="primary full" disabled={busy}>
+          <button type="submit" className="primary full" disabled={busy || !emailAvailable}>
             <Mail size={18} /> {busy ? "Mengirim..." : "Kirim kode OTP"}
           </button>
         </form>
