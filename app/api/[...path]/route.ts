@@ -25,14 +25,15 @@ async function handler(
         );
     }
     if (path === "health") {
+      const passwordResetAvailable = Boolean(process.env.RESEND_API_KEY && process.env.PASSWORD_RESET_FROM);
       if (!process.env.DATABASE_URL)
         return NextResponse.json(
-          { configured: false, connected: false, migrated: false, tables: [] },
+          { configured: false, connected: false, migrated: false, tables: [], passwordResetAvailable },
           { status: 503 },
         );
       try {
         const status = await checkDatabase();
-        return NextResponse.json({ configured: true, ...status });
+        return NextResponse.json({ configured: true, ...status, passwordResetAvailable });
       } catch {
         return NextResponse.json(
           {
@@ -40,6 +41,7 @@ async function handler(
             connected: false,
             migrated: false,
             tables: [],
+            passwordResetAvailable,
             error: "Koneksi database Neon gagal.",
           },
           { status: 503 },
