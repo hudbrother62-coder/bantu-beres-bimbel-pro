@@ -50,12 +50,19 @@ export default function OtpPasswordRecovery({ initialEmail = "", emailAvailable 
   }
   async function requestOtp() {
     await execute(async () => {
-      await post("request-otp", { email: email.trim().toLowerCase() });
+      const response = await post("request-otp", { email: email.trim().toLowerCase() });
       try { localStorage.setItem("bimbel-recovery-request", JSON.stringify({ email: email.trim().toLowerCase(), savedAt: Date.now() })); } catch { /* optional */ }
       setStage("code");
       setCode("");
       setResendAfter(60);
-      setNotice("Jika email terdaftar, OTP akan dikirim otomatis saat giliran tersedia. Permintaan dan kode yang masih berlaku tidak diganti. Periksa email secara berkala.");
+      const estimate = response.estimatedSendAt ? new Date(response.estimatedSendAt) : null;
+      const when = estimate && !Number.isNaN(estimate.getTime())
+        ? " Perkiraan pemeriksaan antrean: " + new Intl.DateTimeFormat("id-ID", {
+            timeZone: "Asia/Jakarta", hour: "2-digit", minute: "2-digit"
+          }).format(estimate) + " WIB."
+        : "";
+      setNotice("Jika email terdaftar, OTP akan dikirim otomatis saat giliran tersedia." +
+        when + " Permintaan dan kode yang masih berlaku tidak diganti. Periksa email secara berkala.");
     });
   }
   async function verifyOtp() {

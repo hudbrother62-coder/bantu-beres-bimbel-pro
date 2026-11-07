@@ -51,6 +51,27 @@ export const passwordResetOtps = pgTable("password_reset_otps", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   usedAt: timestamp("used_at", { withTimezone: true }),
 }, (t) => [index("otp_account_created").on(t.accountId, t.createdAt)]);
+export const passwordResetQueue = pgTable("password_reset_queue", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  accountId: uuid("account_id").notNull().unique().references(() => accounts.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("queued"),
+  codeCiphertext: text("code_ciphertext"),
+  idempotencyKey: text("idempotency_key"),
+  otpId: uuid("otp_id").references(() => passwordResetOtps.id, { onDelete: "set null" }),
+  attempts: integer("attempts").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+  lockedUntil: timestamp("locked_until", { withTimezone: true }),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  providerId: text("provider_id"),
+  lastError: text("last_error"),
+}, (t) => [index("otp_queue_due").on(t.status, t.nextAttemptAt)]);
+
+export const passwordResetSendWindows = pgTable("password_reset_send_windows", {
+  bucket: timestamp("bucket", { withTimezone: true }).primaryKey(),
+  used: integer("used").notNull().default(0),
+});
 export const records = pgTable(
   "records",
   {

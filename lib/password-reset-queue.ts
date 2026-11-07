@@ -39,6 +39,24 @@ export function retrySeconds(tries: number, retryAfter?: string | null) {
 export function transientHttp(status: number) {
   return status === 429 || status === 408 || status >= 500 || status === 409;
 }
+async function estimatedAck() {
+  // A shared, rounded estimate is returned for known and unknown emails alike.
+  // Do not disclose whether an individual account exists.
+  try {
+    const result = await connectionPool().query<{pending:string; used:number; earliest:Date|null}>(
+      "SELECT (SELECT count(*)::text FROM password_reset_queue WHERE status IN ('queued','sending')) AS pending, " +
+      "COALESCE((SELECT used FROM password_reset_send_windows WHERE bucket=date_trunc('hour',now())),0) AS used, " +
+      "(SELECT min(next_attempt_at) FROM password_reset_queue WHERE status IN ('queued','sending')) AS earliest"
+    );
+    const row = result.rows[0], now = Date.now();
+    const overflow = Math.max(0,Number(row.used)+Number(row.pending)-limit());
+    const additionalHours = Math.ceil(overflow/limit());
+    const hourStart = Math.floor(now/3600000)*3600000;
+    const byQuota = additionalHours ? hourStart + additionalHours*3600000 : now;
+    const earliest = row.earliest ? new Date(row.earliest).getTime() : now;
+    return { ...ACK, estimatedSendAt: new Date(Math.max(now,byQuota,earliest)).toISOString() };
+  } catch { return ACK; }
+}
 export async function requestQueuedOtp(email: string) {
   if (!queueReady()) throw new Error("Pengiriman OTP belum dikonfigurasi.");
   const client = await connectionPool().connect();
@@ -79,7 +97,7 @@ export async function requestQueuedOtp(email: string) {
   } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
   finally { client.release(); }
   if (eligible) await drainOtpQueue(1).catch(() => undefined);
-  return ACK;
+  return estimatedAck();
 }
 async function claim(): Promise<Job | null> {
   const client = await connectionPool().connect();
