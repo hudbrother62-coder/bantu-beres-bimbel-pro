@@ -261,6 +261,7 @@ export default function Workspace() {
     [archived, setArchived] = useState(false),
     [filter, setFilter] = useState(""),
     [selection, setSelection] = useState<string[]>([]),
+    [selectedInvoices, setSelectedInvoices] = useState<string[]>([]),
     [form, setForm] = useState<any>(null),
     [values, setValues] = useState<Data>({}),
     [confirmation, setConfirmation] = useState<any>(null),
@@ -316,6 +317,9 @@ export default function Workspace() {
     setDark(pref);
   }, [refresh]);
   useEffect(() => {
+    setSelectedInvoices([]);
+  }, [month]);
+  useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
     localStorage.setItem("bb-theme", dark ? "dark" : "light");
   }, [dark]);
@@ -334,6 +338,7 @@ export default function Workspace() {
     "—";
   const kindRows = (k: string) => active.filter((r) => r.kind === k);
   function go(p: string) {
+    setSelectedInvoices([]);
     setPage(p);
     setMenu(false);
     setSearch("");
@@ -405,6 +410,18 @@ export default function Workspace() {
         .map((p) => p.data),
     ),
   }));
+  const invoicePayments = kindRows("payments");
+  const hasInvoiceHistory = (invoiceId: string) =>
+    invoicePayments.some((p) => p.data.invoiceId === invoiceId);
+  const visibleInvoices = invs.filter(
+    (r) =>
+      r.data.month === month &&
+      String(r.data.studentName || "").toLowerCase().includes(search.toLowerCase()) &&
+      (!filter || r.summary.status === filter),
+  );
+  const deletableInvoices = visibleInvoices.filter(
+    (r) => !hasInvoiceHistory(r.id),
+  );
   const visibleNav = navigation.filter(
     ([id]) =>
       ["dashboard", "calendar", "attendance", "guide"].includes(id) ||
@@ -1794,12 +1811,18 @@ export default function Workspace() {
                     <input
                       placeholder="Cari siswa…"
                       value={search}
-                      onChange={(e) => setSearch(e.target.value)}
+                      onChange={(e) => {
+                        setSearch(e.target.value);
+                        setSelectedInvoices([]);
+                      }}
                     />
                   </div>
                   <select
                     value={filter}
-                    onChange={(e) => setFilter(e.target.value)}
+                    onChange={(e) => {
+                      setFilter(e.target.value);
+                      setSelectedInvoices([]);
+                    }}
                   >
                     <option value="">Semua status</option>
                     {["Belum", "Kurang", "Lunas"].map((s) => (
@@ -1842,11 +1865,49 @@ export default function Workspace() {
                     Excel
                   </button>
                 </div>
+                {selectedInvoices.length > 0 && (
+                  <div className="selection-bar">
+                    <strong>{selectedInvoices.length} tagihan dipilih</strong>
+                    <button
+                      className="danger-button"
+                      disabled={busy}
+                      onClick={() =>
+                        setConfirmation({ invoiceIds: [...selectedInvoices] })
+                      }
+                    >
+                      <Trash2 size={16} />
+                      Hapus terpilih
+                    </button>
+                    <button onClick={() => setSelectedInvoices([])}>
+                      Batal pilih
+                    </button>
+                  </div>
+                )}
                 {invs.filter((r) => r.data.month === month).length ? (
                   <div className="table-wrap">
                     <table>
                       <thead>
                         <tr>
+                          <th>
+                            <input
+                              type="checkbox"
+                              aria-label="Pilih semua tagihan tanpa pembayaran"
+                              disabled={!deletableInvoices.length || busy}
+                              checked={
+                                deletableInvoices.length > 0 &&
+                                deletableInvoices.every((r) =>
+                                  selectedInvoices.includes(r.id),
+                                )
+                              }
+                              onChange={(e) =>
+                                setSelectedInvoices(
+                                  e.target.checked
+                                    ? deletableInvoices.slice(0, 500).map((r) => r.id)
+                                    : [],
+                                )
+                              }
+                            />
+                          </th>
                           <th>Siswa / kelas</th>
                           <th>Tagihan</th>
                           <th>Terbayar</th>
@@ -1856,17 +1917,28 @@ export default function Workspace() {
                         </tr>
                       </thead>
                       <tbody>
-                        {invs
-                          .filter(
-                            (r) =>
-                              r.data.month === month &&
-                              r.data.studentName
-                                .toLowerCase()
-                                .includes(search.toLowerCase()) &&
-                              (!filter || r.summary.status === filter),
-                          )
-                          .map((r) => (
+                        {visibleInvoices.map((r) => (
                             <tr key={r.id}>
+                              <td>
+                                <input
+                                  type="checkbox"
+                                  aria-label={"Pilih tagihan " + r.data.studentName}
+                                  checked={selectedInvoices.includes(r.id)}
+                                  disabled={busy || hasInvoiceHistory(r.id)}
+                                  title={
+                                    hasInvoiceHistory(r.id)
+                                      ? "Tagihan sudah memiliki riwayat pembayaran"
+                                      : "Pilih untuk hapus"
+                                  }
+                                  onChange={(e) =>
+                                    setSelectedInvoices((current) =>
+                                      e.target.checked
+                                        ? [...current, r.id]
+                                        : current.filter((id) => id !== r.id),
+                                    )
+                                  }
+                                />
+                              </td>
                               <td>
                                 <strong>{r.data.studentName}</strong>
                                 <small>{r.data.className}</small>
@@ -1906,6 +1978,24 @@ export default function Workspace() {
                                       </button>
                                     </>
                                   )}
+                                  <button
+                                    className="danger-button"
+                                    disabled={busy || hasInvoiceHistory(r.id)}
+                                    title={
+                                      hasInvoiceHistory(r.id)
+                                        ? "Tidak dapat dihapus karena memiliki riwayat pembayaran"
+                                        : "Hapus tagihan permanen"
+                                    }
+                                    onClick={() =>
+                                      setConfirmation({
+                                        invoiceIds: [r.id],
+                                        invoiceLabel: r.data.studentName,
+                                      })
+                                    }
+                                  >
+                                    <Trash2 size={15} />
+                                    Hapus
+                                  </button>
                                 </div>
                               </td>
                             </tr>
@@ -2853,7 +2943,9 @@ export default function Workspace() {
               ? "Keluar dari akun?"
               : confirmation.voidId
                 ? "Batalkan transaksi?"
-                : confirmation.action === "delete"
+                : confirmation.invoiceIds
+                  ? "Hapus tagihan permanen?"
+                  : confirmation.action === "delete"
                   ? "Hapus data permanen?"
                   : confirmation.action === "restore"
                     ? "Pulihkan data?"
@@ -2868,7 +2960,14 @@ export default function Workspace() {
               ? "Anda dapat masuk kembali kapan saja."
               : confirmation.voidId
                 ? "Transaksi tetap tersimpan dalam riwayat. Perhitungan akan diperbarui."
-                : confirmation.action === "delete"
+                : confirmation.invoiceIds
+                  ? confirmation.invoiceIds.length === 1
+                    ? "Tagihan " +
+                      (confirmation.invoiceLabel || "ini") +
+                      " akan dihapus permanen. Tagihan dengan riwayat pembayaran tidak dapat dihapus. Tindakan ini tidak dapat dibatalkan."
+                    : confirmation.invoiceIds.length +
+                      " tagihan akan dihapus permanen. Jika ada tagihan dengan pembayaran, seluruh proses ditolak tanpa menghapus sebagian data."
+                  : confirmation.action === "delete"
                   ? "Data yang dihapus permanen tidak dapat dipulihkan. Data yang masih digunakan akan ditolak."
                   : confirmation.action === "restore"
                     ? "Data akan kembali ke daftar aktif."
@@ -2896,7 +2995,9 @@ export default function Workspace() {
             </button>
             <button
               className={
-                confirmation.action === "delete" || confirmation.voidId
+                confirmation.action === "delete" ||
+                confirmation.invoiceIds ||
+                confirmation.voidId
                   ? "danger-button"
                   : "primary"
               }
@@ -2908,6 +3009,12 @@ export default function Workspace() {
                   if (confirmation.logout) {
                     await api("auth/logout", {});
                     setState(null);
+                  } else if (confirmation.invoiceIds) {
+                    await run(
+                      () => api("invoices/delete", { ids: confirmation.invoiceIds }),
+                      confirmation.invoiceIds.length + " tagihan dihapus.",
+                    );
+                    setSelectedInvoices([]);
                   } else
                     await run(
                       () =>

@@ -133,6 +133,8 @@ async function handler(
       result = await svc.saveAttendance(db, u, input);
     else if (req.method === "POST" && path === "invoices")
       result = await svc.generateInvoices(db, u, input.month);
+    else if (req.method === "POST" && path === "invoices/delete")
+      result = await svc.deleteInvoices(db, u, input.ids);
     else if (req.method === "POST" && path === "pay")
       result = await svc.pay(db, u, input);
     else if (req.method === "POST" && path === "void")
