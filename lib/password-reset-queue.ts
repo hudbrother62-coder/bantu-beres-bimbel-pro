@@ -13,9 +13,18 @@ function key() {
   if (!/^[a-f0-9]{64}$/i.test(hex)) throw new Error("Enkripsi antrean belum dikonfigurasi.");
   return Buffer.from(hex, "hex");
 }
+export function otpSenderFrom() {
+  const explicit = (process.env.PASSWORD_RESET_FROM || "").trim();
+  if (explicit) return explicit;
+  const domain = (process.env.RESEND_EMAIL_DOMAIN || "").trim().toLowerCase();
+  // Fallback only to a real configured sender domain, never resend.dev testing.
+  if (/^(?!-)[a-z0-9.-]+\.[a-z]{2,}$/.test(domain) && !domain.endsWith("resend.dev"))
+    return "Bimbel Pro <otp@" + domain + ">";
+  return "";
+}
 export function queueReady() {
   return /^[a-f0-9]{64}$/i.test(process.env.OTP_QUEUE_ENCRYPTION_KEY || "") &&
-    Boolean(process.env.RESEND_API_KEY && process.env.PASSWORD_RESET_FROM);
+    Boolean(process.env.RESEND_API_KEY && otpSenderFrom());
 }
 export function encryptOtp(code: string, secret: Buffer) {
   const iv = randomBytes(12);
@@ -159,7 +168,7 @@ async function send(job: Job) {
       headers: { Authorization: "Bearer " + process.env.RESEND_API_KEY,
         "Content-Type": "application/json", "Idempotency-Key": job.idempotency_key! },
       body: JSON.stringify({
-        from: process.env.PASSWORD_RESET_FROM, to: [job.email],
+        from: otpSenderFrom(), to: [job.email],
         subject: "Kode pemulihan password Bantu Beres Bimbel Pro",
         text: "Kode OTP Bimbel Pro: " + code +
           "\n\nKode berlaku 10 menit setelah permintaan email diterima pengirim. Hanya satu kali pakai."

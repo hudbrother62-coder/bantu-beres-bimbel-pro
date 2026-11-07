@@ -3,7 +3,7 @@ import { checkDatabase, database } from "../../../lib/db";
 import { authenticate, login, logout, register } from "../../../lib/auth";
 import * as svc from "../../../lib/service";
 import { requestPasswordOtp, verifyPasswordOtp, confirmPasswordReset } from "../../../lib/password-reset";
-import { queueReady } from "../../../lib/password-reset-queue";
+import { queueReady, otpSenderFrom } from "../../../lib/password-reset-queue";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 async function handler(
@@ -27,7 +27,7 @@ async function handler(
     }
     if (path === "health") {
       const passwordResetAvailable = queueReady();
-      const otpEmailConfig = { apiKeyPresent: Boolean(process.env.RESEND_API_KEY), senderPresent: Boolean(process.env.PASSWORD_RESET_FROM), queueEncryptionReady: /^[0-9a-f]{64}$/i.test(process.env.OTP_QUEUE_ENCRYPTION_KEY || "") };
+      const otpEmailConfig = { apiKeyPresent: Boolean(process.env.RESEND_API_KEY), senderPresent: Boolean(otpSenderFrom()), senderDomainConfigured: Boolean(process.env.RESEND_EMAIL_DOMAIN), queueEncryptionReady: /^[0-9a-f]{64}$/i.test(process.env.OTP_QUEUE_ENCRYPTION_KEY || "") };
       if (!process.env.DATABASE_URL)
         return NextResponse.json(
           { configured: false, connected: false, migrated: false, tables: [], passwordResetAvailable, otpEmailConfig },
