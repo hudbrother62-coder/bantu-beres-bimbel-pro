@@ -75,8 +75,9 @@ async function handler(
       return res;
     }
     if (req.method === "POST" && path === "auth/request-otp") {
-      await requestPasswordOtp(input, db);
-      return NextResponse.json({ ok: true, message: "Jika email terdaftar, kode OTP akan dikirim." }, { headers: { "Cache-Control": "no-store" } });
+      const receipt = await requestPasswordOtp(input, db);
+      const estimatedSendAt = "estimatedSendAt" in receipt ? receipt.estimatedSendAt : null;
+      return NextResponse.json({ ok: true, message: "Jika email terdaftar, OTP akan dikirim atau diantrikan otomatis.", estimatedSendAt }, { headers: { "Cache-Control": "no-store" } });
     }
     if (req.method === "POST" && path === "auth/verify-otp") {
       const result = await verifyPasswordOtp(input, db);
