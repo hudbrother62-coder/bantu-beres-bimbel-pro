@@ -442,6 +442,56 @@ export async function generateInvoices(db: any, u: User, month: string) {
     return count;
   });
 }
+/**
+ * Delete unpaid invoices inside one tenant-locked transaction.
+ * Even voided payments prevent removal to preserve the financial trail.
+ */
+export async function deleteInvoices(db: any, u: User, ids: string[]) {
+  guard(u, "invoices");
+  if (
+    !Array.isArray(ids) ||
+    !ids.length ||
+    ids.length > 500 ||
+    ids.some((id) => typeof id !== "string") ||
+    new Set(ids).size !== ids.length
+  )
+    throw new Error("Pilih 1 sampai 500 tagihan yang valid.");
+  return db.transaction(async (tx: any) => {
+    await lock(tx, u);
+    const rows = await allRows(tx, u);
+    // Validate every item before deleting any: batch deletion is all or nothing.
+    for (const id of ids) {
+      const invoice = rows.find(
+        (r) => r.id === id && r.kind === "invoices" && !r.archived,
+      );
+      if (!invoice)
+        throw new Error("Tagihan tidak ditemukan. Muat ulang data terlebih dahulu.");
+      const related = rows.some(
+        (r) =>
+          r.id !== id &&
+          Object.entries(r.data).some(
+            ([key, value]) => key.endsWith("Id") && value === id,
+          ),
+      );
+      if (related)
+        throw new Error(
+          "Tagihan " +
+            String(invoice.data.studentName || "") +
+            " sudah memiliki riwayat pembayaran atau data terkait. Tagihan ini tidak dapat dihapus.",
+        );
+    }
+    for (const id of ids) {
+      await tx
+        .delete(records)
+        .where(
+          and(condition(u), eq(records.id, id), eq(records.kind, "invoices")),
+        );
+    }
+    await log(tx, u, "delete-invoices", { ids, count: ids.length });
+    return ids.length;
+  });
+}
+
 export async function pay(db: any, u: User, input: Data) {
   guard(u, "payments");
   return db.transaction(async (tx: any) => {
