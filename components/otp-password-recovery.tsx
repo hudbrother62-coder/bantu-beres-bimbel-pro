@@ -25,6 +25,16 @@ export default function OtpPasswordRecovery({ initialEmail = "", emailAvailable 
   const [notice, setNotice] = useState("");
   const [resendAfter, setResendAfter] = useState(0);
   useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem("bimbel-recovery-request") || "null");
+      if (stored && typeof stored.email === "string" && Date.now() - stored.savedAt < 24 * 60 * 60_000) {
+        setEmail(stored.email);
+        setStage("code");
+        setNotice("Permintaan sebelumnya tetap tercatat. Jika masih dalam antrean, email akan dikirim otomatis. Kode yang masih berlaku tidak diganti.");
+      }
+    } catch { /* Penyimpanan lokal opsional. */ }
+  }, []);
+  useEffect(() => {
     if (resendAfter === 0) return;
     const timeout = setTimeout(() => setResendAfter(value => Math.max(0, value - 1)), 1000);
     return () => clearTimeout(timeout);
@@ -41,10 +51,11 @@ export default function OtpPasswordRecovery({ initialEmail = "", emailAvailable 
   async function requestOtp() {
     await execute(async () => {
       await post("request-otp", { email: email.trim().toLowerCase() });
+      try { localStorage.setItem("bimbel-recovery-request", JSON.stringify({ email: email.trim().toLowerCase(), savedAt: Date.now() })); } catch { /* optional */ }
       setStage("code");
       setCode("");
       setResendAfter(60);
-      setNotice("Jika email terdaftar, permintaan OTP diterima penyedia email. Periksa kotak masuk dan spam.");
+      setNotice("Jika email terdaftar, OTP akan dikirim otomatis saat giliran tersedia. Permintaan dan kode yang masih berlaku tidak diganti. Periksa email secara berkala.");
     });
   }
   async function verifyOtp() {
@@ -60,6 +71,7 @@ export default function OtpPasswordRecovery({ initialEmail = "", emailAvailable 
     await execute(async () => {
       if (password !== confirmation) throw new Error("Konfirmasi password tidak sama.");
       await post("confirm-reset", { token: ticket, password, confirmation });
+      try { localStorage.removeItem("bimbel-recovery-request"); } catch { /* optional */ }
       setNotice("Password berhasil diganti. Anda sedang masuk...");
       window.location.replace("/");
     });
@@ -69,7 +81,7 @@ export default function OtpPasswordRecovery({ initialEmail = "", emailAvailable 
       {emailAvailable ? (
         <div className="notice" style={{ marginBottom: 18, display: "flex", alignItems: "flex-start", gap: 10 }}>
           <ShieldCheck size={20} aria-hidden="true" />
-          <span>Kode OTP dikirim ke email terdaftar. Berlaku 10 menit dan hanya bisa digunakan satu kali.</span>
+          <span>OTP akan dikirim otomatis ke email terdaftar. Kode berlaku 10 menit sejak pengiriman diterima penyedia, sekali pakai.</span>
         </div>
       ) : (
         <div role="alert" className="alert" style={{ marginBottom: 18 }}>
@@ -94,7 +106,7 @@ export default function OtpPasswordRecovery({ initialEmail = "", emailAvailable 
       )}
       {stage === "code" && (
         <form onSubmit={(e) => { e.preventDefault(); void verifyOtp(); }}>
-          <p>Kode dikirim ke <strong>{email.trim().toLowerCase()}</strong>.</p>
+          <p>Kode akan dikirim ke <strong>{email.trim().toLowerCase()}</strong>. Jika mengantre, kamu boleh menutup halaman.</p>
           <label>Kode OTP 6 digit
             <input type="text" autoComplete="one-time-code" inputMode="numeric"
               pattern="[0-9]{6}" maxLength={6} required autoFocus

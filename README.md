@@ -101,3 +101,7 @@ Script memerlukan `DATABASE_URL_UNPOOLED` (atau `DATABASE_URL`) dan `APP_URL` ya
 
 Customer membuka tautan, membuat password baru, lalu otomatis login. Semua sesi lama dicabut. Jika email OTP tersedia, reset biasa pada halaman login tetap disarankan. Endpoint `/api/health` menyediakan `passwordResetAvailable` (boolean, tanpa secret) untuk memeriksa kesiapan penyedia email.
 
+
+## Smart OTP Queue
+
+OTP requests are stored in Neon with a single active queue job per account. After rate-limit 429/5xx/timeout, the scheduled Neon Function retries automatically; each retry preserves the encrypted OTP and Resend idempotency key. Set OTP_QUEUE_ENCRYPTION_KEY (32 random bytes as hex), CRON_SECRET, and optional OTP_QUEUE_HOURLY_LIMIT (default 20) in Vercel production. Scheduler calls the protected GET /api/cron/otp-queue endpoint. Apply 0003 migration first. Provider acceptance does not guarantee inbox delivery.

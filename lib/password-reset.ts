@@ -2,6 +2,7 @@ import { randomBytes, randomInt } from "node:crypto";
 import { and, eq, gt, isNull, lt, desc, sql } from "drizzle-orm";
 import { accounts, passwordResetOtps, passwordResetTokens, sessions } from "../db/schema";
 import { database } from "./db";
+import { requestQueuedOtp } from "./password-reset-queue";
 import { hashPassword, verifyPassword, issueSession, tokenHash } from "./auth";
 
 type OtpSender = (address: string, code: string) => Promise<void>;
@@ -62,6 +63,7 @@ export async function sendOtpEmail(address: string, code: string) {
 
 export async function requestPasswordOtp(input: any, db: any = database(), sender?: OtpSender) {
   const email = validEmail(input);
+  if (!sender) return requestQueuedOtp(email);
   if (!sender && (!process.env.RESEND_API_KEY || !process.env.PASSWORD_RESET_FROM))
     throw new Error("Pengiriman OTP belum dikonfigurasi. Hubungi pengelola Bimbel Pro.");
 

@@ -5,7 +5,7 @@ import * as schema from "../db/schema";
 
 let pool: Pool | undefined;
 
-function connectionPool() {
+export function connectionPool() {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_NOT_CONFIGURED");
   if (!pool) {
     pool = new Pool({
