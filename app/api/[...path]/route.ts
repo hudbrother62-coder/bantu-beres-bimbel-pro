@@ -35,7 +35,7 @@ async function handler(
         );
       try {
         const status = await checkDatabase();
-        return NextResponse.json({ configured: true, ...status, passwordResetAvailable });
+        return NextResponse.json({ configured: true, ...status, passwordResetAvailable, otpEmailConfig });
       } catch {
         return NextResponse.json(
           {
