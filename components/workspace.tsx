@@ -2525,6 +2525,24 @@ export default function Workspace() {
                     </small>
                   </div>
                   <Badge value={a.active ? "Aktif" : "Nonaktif"} />
+                  {a.id !== user.id && a.role !== "owner" && (
+                    <button className="soft" disabled={busy} onClick={() => {
+                      setForm({ kind: "accounts", row: a });
+                      setValues({
+                        name: a.name, email: a.email, username: a.username,
+                        role: a.role, teacherId: a.teacherId || "",
+                      });
+                      setError("");
+                    }}>
+                      <Pencil size={15} /> Edit
+                    </button>
+                  )}
+                  {a.id !== user.id && a.role !== "owner" && (
+                    <button className="danger-button" disabled={busy}
+                      onClick={() => setConfirmation({ accountId: a.id, accountName: a.name })}>
+                      <Trash2 size={15} /> Hapus
+                    </button>
+                  )}
                   {a.id !== user.id && (
                     <button
                       className="soft"
@@ -2666,7 +2684,7 @@ export default function Workspace() {
         <Modal
           title={
             form.kind === "accounts"
-              ? "Buat akun tim"
+              ? (form.row ? "Edit akun tim" : "Buat akun tim")
               : (form.row ? "Edit " : "Tambah ") +
                 (definitions[form.kind]?.singular || "data")
           }
@@ -2682,7 +2700,9 @@ export default function Workspace() {
                   api(
                     form.kind === "accounts" ? "accounts" : "records",
                     form.kind === "accounts"
-                      ? values
+                      ? form.row
+                        ? { ...values, id: form.row.id, edit: true }
+                        : values
                       : {
                           kind: form.kind,
                           data: values,
@@ -2782,12 +2802,12 @@ export default function Workspace() {
                         required: true,
                       },
                       { key: "username", label: "Username", required: true },
-                      {
+                      ...(!form.row ? [{
                         key: "password",
                         label: "Password (minimal 8 karakter)",
                         type: "password",
                         required: true,
-                      },
+                      }] : []),
                       {
                         key: "role",
                         label: "Peran",
@@ -3013,6 +3033,8 @@ export default function Workspace() {
               ? "Keluar dari akun?"
               : confirmation.voidId
                 ? "Batalkan transaksi?"
+                : confirmation.accountId
+                  ? "Hapus akun tim permanen?"
                 : confirmation.invoiceIds
                   ? "Hapus tagihan permanen?"
                   : confirmation.action === "delete"
@@ -3030,6 +3052,9 @@ export default function Workspace() {
               ? "Anda dapat masuk kembali kapan saja."
               : confirmation.voidId
                 ? "Transaksi ditandai dibatalkan, tidak dihapus dari riwayat. Laporan keuangan otomatis diperbarui."
+                : confirmation.accountId
+                  ? "Akun " + confirmation.accountName +
+                    " akan dihapus permanen, semua sesi login dicabut. Data belajar dan keuangan tidak ikut terhapus."
                 : confirmation.invoiceIds
                   ? confirmation.invoiceIds.length === 1
                     ? "Tagihan " +
@@ -3067,6 +3092,7 @@ export default function Workspace() {
               className={
                 confirmation.action === "delete" ||
                 confirmation.invoiceIds ||
+                confirmation.accountId ||
                 confirmation.voidId
                   ? "danger-button"
                   : "primary"
@@ -3079,6 +3105,11 @@ export default function Workspace() {
                   if (confirmation.logout) {
                     await api("auth/logout", {});
                     setState(null);
+                  } else if (confirmation.accountId) {
+                    await run(
+                      () => api("accounts/delete", { id: confirmation.accountId }),
+                      "Akun tim berhasil dihapus.",
+                    );
                   } else if (confirmation.invoiceIds) {
                     await run(
                       () => api("invoices/delete", { ids: confirmation.invoiceIds }),
