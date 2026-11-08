@@ -271,6 +271,9 @@ export default function Workspace() {
     [presensi, setPresensi] = useState<Data[]>([]),
     [material, setMaterial] = useState(""),
     [payment, setPayment] = useState<Row | null>(null),
+    [paymentEditor, setPaymentEditor] = useState<Row | null>(null),
+    [invoiceEditor, setInvoiceEditor] = useState<Row | null>(null),
+    [invoiceAmount, setInvoiceAmount] = useState(0),
     [receipt, setReceipt] = useState<Row | null>(null),
     [reason, setReason] = useState(""),
     [settings, setSettings] = useState<Data>({}),
@@ -1260,7 +1263,7 @@ export default function Workspace() {
                   Ekspor
                 </button>
               </div>
-              {selection.length > 0 && (
+              {canWrite && selection.length > 0 && (
                 <div className="selection-bar">
                   <strong>{selection.length} dipilih</strong>
                   <button
@@ -1271,7 +1274,7 @@ export default function Workspace() {
                       })
                     }
                   >
-                    {archived ? "Pulihkan" : "Arsipkan"}
+                    {archived ? "Pulihkan" : "Hapus terpilih"}
                   </button>
                   {archived && (
                     <button
@@ -1287,10 +1290,10 @@ export default function Workspace() {
               )}
               {tableRows.length ? (
                 <div className="table-wrap">
-                  <table>
+                  <table className="action-table">
                     <thead>
                       <tr>
-                        {user.role !== "teacher" && (
+                        {canWrite && user.role !== "teacher" && (
                           <th>
                             <input
                               type="checkbox"
@@ -1318,7 +1321,7 @@ export default function Workspace() {
                     <tbody>
                       {tableRows.map((r) => (
                         <tr key={r.id}>
-                          {user.role !== "teacher" && (
+                          {canWrite && user.role !== "teacher" && (
                             <td>
                               <input
                                 type="checkbox"
@@ -1352,29 +1355,26 @@ export default function Workspace() {
                           <td>
                             <div className="row-actions">
                               {!archived && canWrite && (
-                                <button
-                                  className="icon"
-                                  aria-label="Edit"
-                                  onClick={() => add(page, r)}
-                                >
-                                  <Pencil size={16} />
+                                <button className="soft" onClick={() => add(page, r)}>
+                                  <Pencil size={15} /> Edit
                                 </button>
                               )}
-                              {user.role !== "teacher" && (
-                                <button
-                                  className="icon"
-                                  aria-label={
-                                    archived ? "Pulihkan" : "Arsipkan"
-                                  }
-                                  onClick={() =>
-                                    setConfirmation({
-                                      ids: [r.id],
-                                      action: archived ? "restore" : "archive",
-                                    })
-                                  }
-                                >
-                                  <Archive size={16} />
-                                </button>
+                              {canWrite && user.role !== "teacher" && (
+                                <>
+                                  <button className={archived ? "soft" : "danger-button"}
+                                    onClick={() => setConfirmation({
+                                      ids: [r.id], action: archived ? "restore" : "archive",
+                                    })}>
+                                    {archived ? <Archive size={15} /> : <Trash2 size={15} />}
+                                    {archived ? "Pulihkan" : "Hapus"}
+                                  </button>
+                                  {archived && (
+                                    <button className="danger-button"
+                                      onClick={() => setConfirmation({ ids: [r.id], action: "delete" })}>
+                                      <Trash2 size={15} /> Hapus permanen
+                                    </button>
+                                  )}
+                                </>
                               )}
                             </div>
                           </td>
@@ -1755,7 +1755,7 @@ export default function Workspace() {
                           setDate(s.data.date);
                         }}
                       >
-                        Buka
+                        <Pencil size={15} /> Edit presensi
                       </button>
                       {user.role === "owner" && !s.data.cancelled && (
                         <button
@@ -1885,7 +1885,7 @@ export default function Workspace() {
                 )}
                 {invs.filter((r) => r.data.month === month).length ? (
                   <div className="table-wrap">
-                    <table>
+                    <table className="action-table">
                       <thead>
                         <tr>
                           <th>
@@ -1978,6 +1978,14 @@ export default function Workspace() {
                                       </button>
                                     </>
                                   )}
+                                  <button className="soft" disabled={busy}
+                                    onClick={() => {
+                                      setInvoiceEditor(r);
+                                      setInvoiceAmount(Number(r.data.amount));
+                                      setError("");
+                                    }}>
+                                    <Pencil size={15} /> Edit
+                                  </button>
                                   <button
                                     className="danger-button"
                                     disabled={busy || hasInvoiceHistory(r.id)}
@@ -2136,7 +2144,7 @@ export default function Workspace() {
                 </button>
               </div>
               <div className="table-wrap">
-                <table>
+                <table className="action-table">
                   <thead>
                     <tr>
                       <th>Kuitansi</th>
@@ -2177,6 +2185,16 @@ export default function Workspace() {
                                 Kuitansi
                               </button>
                               {user.role === "owner" && !r.data.voided && (
+                                <button className="soft" onClick={() => {
+                                  setPaymentEditor(r);
+                                  setValues({ amount: r.data.amount, date: r.data.date,
+                                    method: r.data.method, notes: r.data.notes || "" });
+                                  setError("");
+                                }}>
+                                  <Pencil size={15} /> Edit
+                                </button>
+                              )}
+                              {user.role === "owner" && !r.data.voided && (
                                 <button
                                   className="link danger"
                                   onClick={() => {
@@ -2184,7 +2202,7 @@ export default function Workspace() {
                                     setConfirmation({ voidId: r.id });
                                   }}
                                 >
-                                  Batalkan
+                                  <Trash2 size={15} /> Hapus / batalkan
                                 </button>
                               )}
                             </div>
@@ -2507,6 +2525,24 @@ export default function Workspace() {
                     </small>
                   </div>
                   <Badge value={a.active ? "Aktif" : "Nonaktif"} />
+                  {a.id !== user.id && a.role !== "owner" && (
+                    <button className="soft" disabled={busy} onClick={() => {
+                      setForm({ kind: "accounts", row: a });
+                      setValues({
+                        name: a.name, email: a.email, username: a.username,
+                        role: a.role, teacherId: a.teacherId || "",
+                      });
+                      setError("");
+                    }}>
+                      <Pencil size={15} /> Edit
+                    </button>
+                  )}
+                  {a.id !== user.id && a.role !== "owner" && (
+                    <button className="danger-button" disabled={busy}
+                      onClick={() => setConfirmation({ accountId: a.id, accountName: a.name })}>
+                      <Trash2 size={15} /> Hapus
+                    </button>
+                  )}
                   {a.id !== user.id && (
                     <button
                       className="soft"
@@ -2648,7 +2684,7 @@ export default function Workspace() {
         <Modal
           title={
             form.kind === "accounts"
-              ? "Buat akun tim"
+              ? (form.row ? "Edit akun tim" : "Buat akun tim")
               : (form.row ? "Edit " : "Tambah ") +
                 (definitions[form.kind]?.singular || "data")
           }
@@ -2664,7 +2700,9 @@ export default function Workspace() {
                   api(
                     form.kind === "accounts" ? "accounts" : "records",
                     form.kind === "accounts"
-                      ? values
+                      ? form.row
+                        ? { ...values, id: form.row.id, edit: true }
+                        : values
                       : {
                           kind: form.kind,
                           data: values,
@@ -2764,12 +2802,12 @@ export default function Workspace() {
                         required: true,
                       },
                       { key: "username", label: "Username", required: true },
-                      {
+                      ...(!form.row ? [{
                         key: "password",
                         label: "Password (minimal 8 karakter)",
                         type: "password",
                         required: true,
-                      },
+                      }] : []),
                       {
                         key: "role",
                         label: "Peran",
@@ -2812,6 +2850,58 @@ export default function Workspace() {
               >
                 {busy ? "Menyimpan…" : "Simpan"}
               </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+      {invoiceEditor && (
+        <Modal title={"Edit tagihan " + String(invoiceEditor.data.studentName)}
+          onClose={() => { if (!busy) setInvoiceEditor(null); }}>
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            try {
+              await run(() => api("invoices/edit", {
+                id: invoiceEditor.id, version: invoiceEditor.version, amount: invoiceAmount,
+              }), "Nominal tagihan diperbarui.");
+              setInvoiceEditor(null);
+            } catch {}
+          }}>
+            <p>Nominal tidak boleh kurang dari pembayaran yang sudah masuk. Identitas siswa dan periode tetap.</p>
+            <label>Nominal tagihan (Rp)
+              <input type="number" min="0" max="1000000000" step="1" required
+                value={invoiceAmount} onChange={(e) => setInvoiceAmount(Number(e.target.value))} />
+            </label>
+            {error && <div className="alert">{error}</div>}
+            <div className="form-footer">
+              <button type="button" className="soft" disabled={busy} onClick={() => setInvoiceEditor(null)}>Batal</button>
+              <button className="primary" disabled={busy}>{busy ? "Menyimpan…" : "Simpan perubahan"}</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+      {paymentEditor && (
+        <Modal title={"Edit pembayaran " + String(paymentEditor.data.receipt)}
+          onClose={() => { if (!busy) setPaymentEditor(null); }}>
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            try {
+              await run(() => api("payments/edit", {
+                ...values, id: paymentEditor.id, version: paymentEditor.version,
+              }), "Koreksi pembayaran tersimpan.");
+              setPaymentEditor(null);
+            } catch {}
+          }}>
+            <p>Perbaiki nominal, tanggal, metode, atau catatan. Nomor kuitansi tetap; koreksi diaudit.</p>
+            <FormFields fields={[
+              { key: "amount", label: "Nominal (Rp)", type: "number", min: 1, required: true },
+              { key: "date", label: "Tanggal diterima", type: "date", required: true },
+              { key: "method", label: "Metode", options: ["Tunai", "Transfer", "QRIS", "Dispensasi"], required: true },
+              { key: "notes", label: "Catatan", type: "textarea" },
+            ]} values={values} setValues={setValues} rows={rows} />
+            {error && <div className="alert">{error}</div>}
+            <div className="form-footer">
+              <button type="button" className="soft" disabled={busy} onClick={() => setPaymentEditor(null)}>Batal</button>
+              <button className="primary" disabled={busy}>{busy ? "Menyimpan…" : "Simpan koreksi"}</button>
             </div>
           </form>
         </Modal>
@@ -2943,6 +3033,8 @@ export default function Workspace() {
               ? "Keluar dari akun?"
               : confirmation.voidId
                 ? "Batalkan transaksi?"
+                : confirmation.accountId
+                  ? "Hapus akun tim permanen?"
                 : confirmation.invoiceIds
                   ? "Hapus tagihan permanen?"
                   : confirmation.action === "delete"
@@ -2959,7 +3051,10 @@ export default function Workspace() {
             {confirmation.logout
               ? "Anda dapat masuk kembali kapan saja."
               : confirmation.voidId
-                ? "Transaksi tetap tersimpan dalam riwayat. Perhitungan akan diperbarui."
+                ? "Transaksi ditandai dibatalkan, tidak dihapus dari riwayat. Laporan keuangan otomatis diperbarui."
+                : confirmation.accountId
+                  ? "Akun " + confirmation.accountName +
+                    " akan dihapus permanen, semua sesi login dicabut. Data belajar dan keuangan tidak ikut terhapus."
                 : confirmation.invoiceIds
                   ? confirmation.invoiceIds.length === 1
                     ? "Tagihan " +
@@ -2971,7 +3066,7 @@ export default function Workspace() {
                   ? "Data yang dihapus permanen tidak dapat dipulihkan. Data yang masih digunakan akan ditolak."
                   : confirmation.action === "restore"
                     ? "Data akan kembali ke daftar aktif."
-                    : "Data disimpan di arsip agar riwayat tetap tersedia."}
+                    : "Data dipindahkan ke Arsip. Dapat dipulihkan atau dihapus permanen bila tidak dipakai data lain."}
           </p>
           {confirmation.voidId && (
             <label>
@@ -2997,6 +3092,7 @@ export default function Workspace() {
               className={
                 confirmation.action === "delete" ||
                 confirmation.invoiceIds ||
+                confirmation.accountId ||
                 confirmation.voidId
                   ? "danger-button"
                   : "primary"
@@ -3009,6 +3105,11 @@ export default function Workspace() {
                   if (confirmation.logout) {
                     await api("auth/logout", {});
                     setState(null);
+                  } else if (confirmation.accountId) {
+                    await run(
+                      () => api("accounts/delete", { id: confirmation.accountId }),
+                      "Akun tim berhasil dihapus.",
+                    );
                   } else if (confirmation.invoiceIds) {
                     await run(
                       () => api("invoices/delete", { ids: confirmation.invoiceIds }),

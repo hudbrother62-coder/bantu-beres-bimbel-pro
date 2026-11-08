@@ -135,6 +135,10 @@ async function handler(
       result = await svc.generateInvoices(db, u, input.month);
     else if (req.method === "POST" && path === "invoices/delete")
       result = await svc.deleteInvoices(db, u, input.ids);
+    else if (req.method === "POST" && path === "invoices/edit")
+      result = await svc.editInvoice(db, u, input);
+    else if (req.method === "POST" && path === "payments/edit")
+      result = await svc.editPayment(db, u, input);
     else if (req.method === "POST" && path === "pay")
       result = await svc.pay(db, u, input);
     else if (req.method === "POST" && path === "void")
@@ -148,6 +152,8 @@ async function handler(
       result = await svc.saveSettings(db, u, input);
     else if (req.method === "POST" && path === "accounts")
       result = await svc.saveAccount(db, u, input);
+    else if (req.method === "POST" && path === "accounts/delete")
+      result = await svc.deleteAccount(db, u, input.id);
     else
       return NextResponse.json(
         { error: "Halaman tidak ditemukan." },
