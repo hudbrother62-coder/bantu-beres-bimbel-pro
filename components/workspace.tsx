@@ -1260,7 +1260,7 @@ export default function Workspace() {
                   Ekspor
                 </button>
               </div>
-              {selection.length > 0 && (
+              {canWrite && selection.length > 0 && (
                 <div className="selection-bar">
                   <strong>{selection.length} dipilih</strong>
                   <button
@@ -1271,7 +1271,7 @@ export default function Workspace() {
                       })
                     }
                   >
-                    {archived ? "Pulihkan" : "Arsipkan"}
+                    {archived ? "Pulihkan" : "Hapus terpilih"}
                   </button>
                   {archived && (
                     <button
@@ -1287,10 +1287,10 @@ export default function Workspace() {
               )}
               {tableRows.length ? (
                 <div className="table-wrap">
-                  <table>
+                  <table className="action-table">
                     <thead>
                       <tr>
-                        {user.role !== "teacher" && (
+                        {canWrite && user.role !== "teacher" && (
                           <th>
                             <input
                               type="checkbox"
@@ -1318,7 +1318,7 @@ export default function Workspace() {
                     <tbody>
                       {tableRows.map((r) => (
                         <tr key={r.id}>
-                          {user.role !== "teacher" && (
+                          {canWrite && user.role !== "teacher" && (
                             <td>
                               <input
                                 type="checkbox"
@@ -1352,30 +1352,27 @@ export default function Workspace() {
                           <td>
                             <div className="row-actions">
                               {!archived && canWrite && (
-                                <button
-                                  className="icon"
-                                  aria-label="Edit"
-                                  onClick={() => add(page, r)}
-                                >
-                                  <Pencil size={16} />
+                                <button className="soft" onClick={() => add(page, r)}>
+                                  <Pencil size={15} /> Edit
                                 </button>
                               )}
-                              {user.role !== "teacher" && (
-                                <button
-                                  className="icon"
-                                  aria-label={
-                                    archived ? "Pulihkan" : "Arsipkan"
-                                  }
-                                  onClick={() =>
-                                    setConfirmation({
-                                      ids: [r.id],
-                                      action: archived ? "restore" : "archive",
-                                    })
-                                  }
-                                >
-                                  <Archive size={16} />
-                                </button>
-                              )}
+                              {canWrite && (
+                                <>
+                                  <button className={archived ? "soft" : "danger-button"}
+                                    onClick={() => setConfirmation({
+                                      ids: [r.id], action: archived ? "restore" : "archive",
+                                    })}>
+                                    {archived ? <Archive size={15} /> : <Trash2 size={15} />}
+                                    {archived ? "Pulihkan" : "Hapus"}
+                                  </button>
+                                  {archived && (
+                                    <button className="danger-button"
+                                      onClick={() => setConfirmation({ ids: [r.id], action: "delete" })}>
+                                      <Trash2 size={15} /> Hapus permanen
+                                    </button>
+                                  )}
+                                </>
+                              )
                             </div>
                           </td>
                         </tr>
@@ -1885,7 +1882,7 @@ export default function Workspace() {
                 )}
                 {invs.filter((r) => r.data.month === month).length ? (
                   <div className="table-wrap">
-                    <table>
+                    <table className="action-table">
                       <thead>
                         <tr>
                           <th>
@@ -2136,7 +2133,7 @@ export default function Workspace() {
                 </button>
               </div>
               <div className="table-wrap">
-                <table>
+                <table className="action-table">
                   <thead>
                     <tr>
                       <th>Kuitansi</th>
