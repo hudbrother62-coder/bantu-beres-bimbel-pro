@@ -1755,7 +1755,7 @@ export default function Workspace() {
                           setDate(s.data.date);
                         }}
                       >
-                        Buka
+                        <Pencil size={15} /> Edit presensi
                       </button>
                       {user.role === "owner" && !s.data.cancelled && (
                         <button
