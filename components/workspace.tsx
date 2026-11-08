@@ -1375,7 +1375,7 @@ export default function Workspace() {
                                     </button>
                                   )}
                                 </>
-                              )
+                              )}
                             </div>
                           </td>
                         </tr>
