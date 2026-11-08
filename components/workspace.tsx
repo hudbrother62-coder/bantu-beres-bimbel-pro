@@ -1359,7 +1359,7 @@ export default function Workspace() {
                                   <Pencil size={15} /> Edit
                                 </button>
                               )}
-                              {canWrite && (
+                              {canWrite && user.role !== "teacher" && (
                                 <>
                                   <button className={archived ? "soft" : "danger-button"}
                                     onClick={() => setConfirmation({
