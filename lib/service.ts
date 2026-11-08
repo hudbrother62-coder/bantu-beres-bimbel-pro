@@ -76,6 +76,14 @@ async function lock(tx: any, u: User) {
     .where(eq(tenants.id, u.tenantId))
     .for("update");
 }
+function referencesRecord(value: unknown, id: string): boolean {
+  if (Array.isArray(value)) return value.some((item) => referencesRecord(item, id));
+  if (!value || typeof value !== "object") return false;
+  return Object.entries(value).some(([key, child]) =>
+    (key.endsWith("Id") && child === id) ||
+    (typeof child === "object" && referencesRecord(child, id))
+  );
+}
 function checkReferences(
   kind: string,
   data: Data,
@@ -234,8 +242,9 @@ export async function bulkImport(
 export async function archive(db: any, u: User, ids: string[], action: string) {
   if (u.role === "teacher") throw new Error("Akses ditolak.");
   if (
-    !ids.length ||
-    ids.length > 500 ||
+    !Array.isArray(ids) || !ids.length || ids.length > 500 ||
+    ids.some((id) => typeof id !== "string") ||
+    new Set(ids).size !== ids.length ||
     !["archive", "restore", "delete"].includes(action)
   )
     throw new Error("Pilihan tidak valid.");
@@ -249,10 +258,10 @@ export async function archive(db: any, u: User, ids: string[], action: string) {
           "Hanya data induk dan catatan operasional dapat diarsip.",
         );
       guard(u, r.kind);
+      if (u.role === "admin" && ["programs", "teachers"].includes(r.kind))
+        throw new Error("Hanya pemilik dapat menghapus program dan pengajar.");
       const related = rows.filter(
-        (x) =>
-          x.id !== id &&
-          Object.entries(x.data).some(([k, v]) => k.endsWith("Id") && v === id),
+        (x) => x.id !== id && referencesRecord(x.data, id),
       );
       if (action === "delete") {
         if (
@@ -467,11 +476,7 @@ export async function deleteInvoices(db: any, u: User, ids: string[]) {
       if (!invoice)
         throw new Error("Tagihan tidak ditemukan. Muat ulang data terlebih dahulu.");
       const related = rows.some(
-        (r) =>
-          r.id !== id &&
-          Object.entries(r.data).some(
-            ([key, value]) => key.endsWith("Id") && value === id,
-          ),
+        (r) => r.id !== id && referencesRecord(r.data, id),
       );
       if (related)
         throw new Error(
@@ -489,6 +494,66 @@ export async function deleteInvoices(db: any, u: User, ids: string[]) {
     }
     await log(tx, u, "delete-invoices", { ids, count: ids.length });
     return ids.length;
+  });
+}
+
+export async function editInvoice(db: any, u: User, input: Data) {
+  guard(u, "invoices");
+  const amount = Number(input.amount);
+  if (!Number.isSafeInteger(amount) || amount < 0 || amount > 1000000000)
+    throw new Error("Nominal tagihan harus Rp0–Rp1.000.000.000.");
+  return db.transaction(async (tx: any) => {
+    await lock(tx, u);
+    const rows = await allRows(tx, u);
+    const inv = rows.find((r) => r.id === input.id && r.kind === "invoices" && !r.archived);
+    if (!inv) throw new Error("Tagihan tidak ditemukan.");
+    if (inv.version !== input.version) throw new Error("Data sudah berubah. Muat ulang dahulu.");
+    const paid = invoiceBalance(Number(inv.data.amount),
+      rows.filter((r) => r.kind === "payments" && r.data.invoiceId === inv.id).map((r) => r.data)
+    ).paid;
+    if (amount < paid) throw new Error("Nominal tagihan tidak boleh kurang dari total pembayaran.");
+    const [updated] = await tx.update(records).set({
+      data: { ...inv.data, amount }, version: sql`${records.version}+1`,
+    }).where(and(condition(u), eq(records.id, inv.id))).returning();
+    await log(tx, u, "edit-invoice", { id: inv.id, before: inv.data.amount, after: amount });
+    return updated;
+  });
+}
+
+export async function editPayment(db: any, u: User, input: Data) {
+  if (u.role !== "owner") throw new Error("Akses ditolak. Hanya pemilik dapat mengedit pembayaran.");
+  const amount = Number(input.amount), date = String(input.date || ""),
+    method = String(input.method || "");
+  if (!Number.isSafeInteger(amount) || amount <= 0 || amount > 1000000000)
+    throw new Error("Nominal pembayaran tidak valid.");
+  if (!["Tunai", "Transfer", "QRIS", "Dispensasi"].includes(method))
+    throw new Error("Metode pembayaran tidak valid.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > today() ||
+    Number.isNaN(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date)
+    throw new Error("Tanggal pembayaran tidak valid.");
+  return db.transaction(async (tx: any) => {
+    await lock(tx, u);
+    const rows = await allRows(tx, u);
+    const payment = rows.find((r) => r.id === input.id && r.kind === "payments" && !r.archived);
+    if (!payment) throw new Error("Pembayaran tidak ditemukan.");
+    if (payment.version !== input.version) throw new Error("Data sudah berubah. Muat ulang dahulu.");
+    if (payment.data.voided) throw new Error("Pembayaran yang dibatalkan tidak dapat diedit.");
+    const inv = rows.find((r) => r.id === payment.data.invoiceId && r.kind === "invoices" && !r.archived);
+    if (!inv) throw new Error("Tagihan tidak ditemukan.");
+    const otherPaid = rows.filter((r) => r.kind === "payments" && r.id !== payment.id &&
+      r.data.invoiceId === inv.id && !r.data.voided
+    ).reduce((a, r) => a + Number(r.data.amount), 0);
+    if (otherPaid + amount > Number(inv.data.amount))
+      throw new Error("Total pembayaran setelah koreksi melebihi tagihan.");
+    const updatedData = { ...payment.data, amount, date, method,
+      notes: String(input.notes || "").slice(0, 2000) };
+    const [updated] = await tx.update(records).set({
+      data: updatedData, version: sql`${records.version}+1`,
+    }).where(and(condition(u), eq(records.id, payment.id))).returning();
+    await log(tx, u, "edit-payment", { id: payment.id,
+      before: { amount: payment.data.amount, date: payment.data.date, method: payment.data.method },
+      after: { amount, date, method } });
+    return updated;
   });
 }
 
@@ -643,6 +708,32 @@ export async function saveSettings(db: any, u: User, input: Data) {
 }
 export async function saveAccount(db: any, u: User, input: Data) {
   guard(u, "accounts");
+  if (input.id && input.edit === true) {
+    const name = String(input.name || "").trim();
+    const email = String(input.email || "").trim().toLowerCase();
+    const username = String(input.username || "").trim().toLowerCase();
+    const role = String(input.role || "");
+    if (!name || name.length > 100 ||
+      !/^\S+@\S+\.\S+$/.test(email) || email.length > 200 ||
+      !/^[a-z0-9_.-]{3,40}$/.test(username) ||
+      !["admin", "teacher"].includes(role))
+      throw new Error("Nama, email, username, atau peran tidak valid.");
+    return db.transaction(async (tx: any) => {
+      await lock(tx, u);
+      const [old] = await tx.select().from(accounts).where(
+        and(eq(accounts.id, input.id), eq(accounts.tenantId, u.tenantId)),
+      );
+      if (!old || old.role === "owner" || old.id === u.id)
+        throw new Error("Akun tidak tersedia untuk diedit.");
+      if (role === "teacher") usable(await allRows(tx, u), input.teacherId, "teachers");
+      await tx.update(accounts).set({
+        name, email, username, role,
+        teacherId: role === "teacher" ? input.teacherId : null,
+      }).where(and(eq(accounts.id, old.id), eq(accounts.tenantId, u.tenantId)));
+      await tx.delete(sessions).where(eq(sessions.accountId, old.id));
+      await log(tx, u, "account-edit", { id: old.id, role, email, username });
+    });
+  }
   if (input.id) {
     if (input.id === u.id)
       throw new Error("Tidak dapat menonaktifkan akun sendiri.");
@@ -674,4 +765,23 @@ export async function saveAccount(db: any, u: User, input: Data) {
       teacherId: input.role === "teacher" ? input.teacherId : null,
     });
   await log(db, u, "account-create", { email: c.email, role: input.role });
+}
+
+export async function deleteAccount(db: any, u: User, id: string) {
+  if (u.role !== "owner") throw new Error("Akses ditolak.");
+  if (!id || id === u.id) throw new Error("Tidak dapat menghapus akun sendiri.");
+  return db.transaction(async (tx: any) => {
+    await lock(tx, u);
+    const [account] = await tx.select().from(accounts).where(
+      and(eq(accounts.id, id), eq(accounts.tenantId, u.tenantId)),
+    );
+    if (!account || account.role === "owner")
+      throw new Error("Hanya akun tim pada lembaga ini yang dapat dihapus.");
+    await tx.delete(sessions).where(eq(sessions.accountId, id));
+    await tx.delete(accounts).where(and(eq(accounts.id, id), eq(accounts.tenantId, u.tenantId)));
+    await log(tx, u, "account-delete", {
+      id, email: account.email, username: account.username, role: account.role,
+    });
+    return true;
+  });
 }
