@@ -271,6 +271,9 @@ export default function Workspace() {
     [presensi, setPresensi] = useState<Data[]>([]),
     [material, setMaterial] = useState(""),
     [payment, setPayment] = useState<Row | null>(null),
+    [paymentEditor, setPaymentEditor] = useState<Row | null>(null),
+    [invoiceEditor, setInvoiceEditor] = useState<Row | null>(null),
+    [invoiceAmount, setInvoiceAmount] = useState(0),
     [receipt, setReceipt] = useState<Row | null>(null),
     [reason, setReason] = useState(""),
     [settings, setSettings] = useState<Data>({}),
@@ -1975,6 +1978,14 @@ export default function Workspace() {
                                       </button>
                                     </>
                                   )}
+                                  <button className="soft" disabled={busy}
+                                    onClick={() => {
+                                      setInvoiceEditor(r);
+                                      setInvoiceAmount(Number(r.data.amount));
+                                      setError("");
+                                    }}>
+                                    <Pencil size={15} /> Edit
+                                  </button>
                                   <button
                                     className="danger-button"
                                     disabled={busy || hasInvoiceHistory(r.id)}
@@ -2174,6 +2185,16 @@ export default function Workspace() {
                                 Kuitansi
                               </button>
                               {user.role === "owner" && !r.data.voided && (
+                                <button className="soft" onClick={() => {
+                                  setPaymentEditor(r);
+                                  setValues({ amount: r.data.amount, date: r.data.date,
+                                    method: r.data.method, notes: r.data.notes || "" });
+                                  setError("");
+                                }}>
+                                  <Pencil size={15} /> Edit
+                                </button>
+                              )}
+                              {user.role === "owner" && !r.data.voided && (
                                 <button
                                   className="link danger"
                                   onClick={() => {
@@ -2181,7 +2202,7 @@ export default function Workspace() {
                                     setConfirmation({ voidId: r.id });
                                   }}
                                 >
-                                  Batalkan
+                                  <Trash2 size={15} /> Hapus / batalkan
                                 </button>
                               )}
                             </div>
@@ -2813,6 +2834,58 @@ export default function Workspace() {
           </form>
         </Modal>
       )}
+      {invoiceEditor && (
+        <Modal title={"Edit tagihan " + String(invoiceEditor.data.studentName)}
+          onClose={() => { if (!busy) setInvoiceEditor(null); }}>
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            try {
+              await run(() => api("invoices/edit", {
+                id: invoiceEditor.id, version: invoiceEditor.version, amount: invoiceAmount,
+              }), "Nominal tagihan diperbarui.");
+              setInvoiceEditor(null);
+            } catch {}
+          }}>
+            <p>Nominal tidak boleh kurang dari pembayaran yang sudah masuk. Identitas siswa dan periode tetap.</p>
+            <label>Nominal tagihan (Rp)
+              <input type="number" min="0" max="1000000000" step="1" required
+                value={invoiceAmount} onChange={(e) => setInvoiceAmount(Number(e.target.value))} />
+            </label>
+            {error && <div className="alert">{error}</div>}
+            <div className="form-footer">
+              <button type="button" className="soft" disabled={busy} onClick={() => setInvoiceEditor(null)}>Batal</button>
+              <button className="primary" disabled={busy}>{busy ? "Menyimpan…" : "Simpan perubahan"}</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+      {paymentEditor && (
+        <Modal title={"Edit pembayaran " + String(paymentEditor.data.receipt)}
+          onClose={() => { if (!busy) setPaymentEditor(null); }}>
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            try {
+              await run(() => api("payments/edit", {
+                ...values, id: paymentEditor.id, version: paymentEditor.version,
+              }), "Koreksi pembayaran tersimpan.");
+              setPaymentEditor(null);
+            } catch {}
+          }}>
+            <p>Perbaiki nominal, tanggal, metode, atau catatan. Nomor kuitansi tetap; koreksi diaudit.</p>
+            <FormFields fields={[
+              { key: "amount", label: "Nominal (Rp)", type: "number", min: 1, required: true },
+              { key: "date", label: "Tanggal diterima", type: "date", required: true },
+              { key: "method", label: "Metode", options: ["Tunai", "Transfer", "QRIS", "Dispensasi"], required: true },
+              { key: "notes", label: "Catatan", type: "textarea" },
+            ]} values={values} setValues={setValues} rows={rows} />
+            {error && <div className="alert">{error}</div>}
+            <div className="form-footer">
+              <button type="button" className="soft" disabled={busy} onClick={() => setPaymentEditor(null)}>Batal</button>
+              <button className="primary" disabled={busy}>{busy ? "Menyimpan…" : "Simpan koreksi"}</button>
+            </div>
+          </form>
+        </Modal>
+      )}
       {payment && (
         <Modal
           title="Catat pembayaran"
@@ -2956,7 +3029,7 @@ export default function Workspace() {
             {confirmation.logout
               ? "Anda dapat masuk kembali kapan saja."
               : confirmation.voidId
-                ? "Transaksi tetap tersimpan dalam riwayat. Perhitungan akan diperbarui."
+                ? "Transaksi ditandai dibatalkan, tidak dihapus dari riwayat. Laporan keuangan otomatis diperbarui."
                 : confirmation.invoiceIds
                   ? confirmation.invoiceIds.length === 1
                     ? "Tagihan " +
@@ -2968,7 +3041,7 @@ export default function Workspace() {
                   ? "Data yang dihapus permanen tidak dapat dipulihkan. Data yang masih digunakan akan ditolak."
                   : confirmation.action === "restore"
                     ? "Data akan kembali ke daftar aktif."
-                    : "Data disimpan di arsip agar riwayat tetap tersedia."}
+                    : "Data dipindahkan ke Arsip. Dapat dipulihkan atau dihapus permanen bila tidak dipakai data lain."}
           </p>
           {confirmation.voidId && (
             <label>
