@@ -11,6 +11,7 @@ import {
   saveRecord,
   allRows,
   saveAttendance,
+  reconcileHonor,
   generateInvoices,
   pay,
   snapshot,
@@ -145,6 +146,25 @@ test("alur bimbel dengan PostgreSQL: CRUD, presensi, billing, isolasi dan role",
   assert.equal(ss.report.income, 100000);
   assert.equal(ss.report.honor, 50000);
   assert.equal(ss.report.profit, 50000);
+  await assert.rejects(
+    () => reconcileHonor(db, { ...u, role: "teacher" }, {
+      id: ses.id, version: ses.version, reason: "Koreksi honor yang tidak berhak",
+    }),
+    /Akses ditolak/,
+  );
+  const corrected = await reconcileHonor(db, u, {
+    id: ses.id, version: ses.version, reason: "Koreksi sesuai tarif terbaru",
+  });
+  assert.equal(corrected.data.honor, 100000);
+  await assert.rejects(
+    () => reconcileHonor(db, u, {
+      id: ses.id, version: ses.version, reason: "Uji versi lama",
+    }),
+    /Data sudah berubah/,
+  );
+  const correctedReport = await snapshot(db, u, month);
+  assert.equal(correctedReport.report.honor, 100000);
+  assert.equal(correctedReport.report.profit, 0);
   await voidRecord(db, u, payment.id, "Salah pembayaran");
   ss = await snapshot(db, u, month);
   assert.equal(ss.report.income, 0);

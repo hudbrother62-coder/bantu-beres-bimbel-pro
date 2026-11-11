@@ -141,6 +141,8 @@ async function handler(
       result = await svc.editPayment(db, u, input);
     else if (req.method === "POST" && path === "pay")
       result = await svc.pay(db, u, input);
+    else if (req.method === "POST" && path === "honors/reconcile")
+      result = await svc.reconcileHonor(db, u, input);
     else if (req.method === "POST" && path === "void")
       result = await svc.voidRecord(
         db,

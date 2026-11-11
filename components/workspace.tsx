@@ -2228,8 +2228,9 @@ export default function Workspace() {
                 <div>
                   <h2>Rekap honor {month}</h2>
                   <p>
-                    Tarif disimpan saat sesi dicatat. Sesi dibatalkan tidak
-                    dihitung.
+                    Tarif disimpan saat sesi dicatat. Jika tarif sekarang berbeda,
+                    pemilik dapat mengoreksi sesi tertentu dengan riwayat audit.
+                    Sesi dibatalkan tidak dihitung.
                   </p>
                 </div>
                 <button
@@ -2279,12 +2280,53 @@ export default function Workspace() {
                       </small>
                       <details>
                         <summary>Rincian sesi</summary>
-                        {ss.map((s) => (
-                          <p key={s.id}>
-                            {s.data.date} · {named(s.data.classId)} ·{" "}
-                            {money(s.data.honor)}
-                          </p>
-                        ))}
+                        {ss.map((s) => {
+                          const classroom = rows.find((r) =>
+                            r.id === s.data.classId && r.kind === "classes" && !r.archived);
+                          const program = rows.find((r) =>
+                            r.id === classroom?.data.programId && r.kind === "programs" && !r.archived);
+                          const teacher = rows.find((r) =>
+                            r.id === s.data.teacherId && r.kind === "teachers" && !r.archived);
+                          const teacherRate = teacher?.data.honor;
+                          const useTeacherRate = teacherRate !== "" && teacherRate != null;
+                          const rate = Number(useTeacherRate ? teacherRate : program?.data.honor);
+                          const hasCurrentRate = Boolean(program && teacher) &&
+                            Number.isSafeInteger(rate) && rate >= 0;
+                          const mismatch = hasCurrentRate && rate !== Number(s.data.honor);
+                          return (
+                            <div key={s.id} style={{ marginTop: 9 }}>
+                              <p style={{ margin: 0 }}>
+                                {s.data.date} · {named(s.data.classId)} ·{" "}
+                                {money(s.data.honor)}
+                              </p>
+                              {mismatch && (
+                                <div className="row-actions" style={{ marginTop: 5, alignItems: "center" }}>
+                                  <small>
+                                    Tarif {useTeacherRate ? "khusus pengajar" : "program"} saat ini:{" "}
+                                    {money(rate)}. Honor sesi masih menggunakan snapshot lama.
+                                  </small>
+                                  {user.role === "owner" && (
+                                    <button className="soft" type="button" disabled={busy}
+                                      onClick={() => {
+                                        setReason("Koreksi honor sesuai tarif aktif");
+                                        setError("");
+                                        setConfirmation({
+                                          honorSessionId: s.id,
+                                          honorVersion: s.version,
+                                          honorOld: Number(s.data.honor),
+                                          honorNew: rate,
+                                          honorClass: named(s.data.classId),
+                                          honorDate: s.data.date,
+                                        });
+                                      }}>
+                                      <Pencil size={14} /> Koreksi honor
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </details>
                     </div>
                     <strong>{money(total)}</strong>
@@ -3033,6 +3075,8 @@ export default function Workspace() {
               ? "Keluar dari akun?"
               : confirmation.voidId
                 ? "Batalkan transaksi?"
+                : confirmation.honorSessionId
+                  ? "Koreksi honor pengajar?"
                 : confirmation.accountId
                   ? "Hapus akun tim permanen?"
                 : confirmation.invoiceIds
@@ -3052,6 +3096,11 @@ export default function Workspace() {
               ? "Anda dapat masuk kembali kapan saja."
               : confirmation.voidId
                 ? "Transaksi ditandai dibatalkan, tidak dihapus dari riwayat. Laporan keuangan otomatis diperbarui."
+                : confirmation.honorSessionId
+                  ? confirmation.honorDate + " · " + confirmation.honorClass +
+                    ": honor tersimpan " + money(confirmation.honorOld) +
+                    " menjadi " + money(confirmation.honorNew) +
+                    " sesuai tarif yang berlaku saat ini. Perubahan tercatat dalam audit dan langsung memperbarui laporan, Excel, serta slip WhatsApp."
                 : confirmation.accountId
                   ? "Akun " + confirmation.accountName +
                     " akan dihapus permanen, semua sesi login dicabut. Data belajar dan keuangan tidak ikut terhapus."
@@ -3068,6 +3117,18 @@ export default function Workspace() {
                     ? "Data akan kembali ke daftar aktif."
                     : "Data dipindahkan ke Arsip. Dapat dipulihkan atau dihapus permanen bila tidak dipakai data lain."}
           </p>
+          {confirmation.honorSessionId && (
+            <label>
+              Alasan koreksi honor
+              <textarea
+                required
+                minLength={8}
+                maxLength={500}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+              />
+            </label>
+          )}
           {confirmation.voidId && (
             <label>
               Alasan pembatalan
@@ -3098,7 +3159,9 @@ export default function Workspace() {
                   : "primary"
               }
               disabled={
-                busy || (confirmation.voidId && reason.trim().length < 5)
+                busy ||
+                (confirmation.voidId && reason.trim().length < 5) ||
+                (confirmation.honorSessionId && reason.trim().length < 8)
               }
               onClick={async () => {
                 try {
@@ -3109,6 +3172,15 @@ export default function Workspace() {
                     await run(
                       () => api("accounts/delete", { id: confirmation.accountId }),
                       "Akun tim berhasil dihapus.",
+                    );
+                  } else if (confirmation.honorSessionId) {
+                    await run(
+                      () => api("honors/reconcile", {
+                        id: confirmation.honorSessionId,
+                        version: confirmation.honorVersion,
+                        reason,
+                      }),
+                      "Honor sesi telah dikoreksi dan laporan diperbarui.",
                     );
                   } else if (confirmation.invoiceIds) {
                     await run(

@@ -613,6 +613,68 @@ export async function pay(db: any, u: User, input: Data) {
     return r;
   });
 }
+/**
+ * Owner-approved reconciliation of a historical session honor.
+ * Attendance retains its original snapshot unless this explicit, audited action is used.
+ */
+export async function reconcileHonor(db: any, u: User, input: Data) {
+  if (u.role !== "owner") throw new Error("Akses ditolak. Hanya pemilik dapat mengoreksi honor.");
+  const reason = String(input.reason || "").trim();
+  if (reason.length < 8 || reason.length > 500)
+    throw new Error("Isi alasan koreksi honor (8–500 karakter).");
+  return db.transaction(async (tx: any) => {
+    await lock(tx, u);
+    const rows = await allRows(tx, u);
+    const session = usable(rows, String(input.id || ""), "sessions");
+    if (session.data.cancelled)
+      throw new Error("Sesi yang dibatalkan tidak dapat dikoreksi.");
+    if (Number(input.version) !== session.version)
+      throw new Error("Data sudah berubah. Muat ulang dahulu.");
+    const classroom = usable(rows, session.data.classId, "classes");
+    const teacher = usable(rows, session.data.teacherId, "teachers");
+    const program = usable(rows, classroom.data.programId, "programs");
+    const teacherRate = teacher.data.honor;
+    const newHonor = Number(
+      teacherRate !== "" && teacherRate !== null && teacherRate !== undefined
+        ? teacherRate
+        : program.data.honor,
+    );
+    if (!Number.isSafeInteger(newHonor) || newHonor < 0)
+      throw new Error("Tarif honor pada program/pengajar tidak valid.");
+    const previousHonor = Number(session.data.honor);
+    if (previousHonor === newHonor)
+      throw new Error("Honor sesi sudah sesuai tarif saat ini.");
+    const [updated] = await tx
+      .update(records)
+      .set({
+        data: {
+          ...session.data,
+          honor: newHonor,
+          honorCorrectedAt: new Date().toISOString(),
+          honorCorrectionReason: reason,
+        },
+        version: sql`${records.version}+1`,
+      })
+      .where(and(
+        condition(u),
+        eq(records.id, session.id),
+        eq(records.version, session.version),
+      ))
+      .returning();
+    if (!updated) throw new Error("Data sudah berubah. Muat ulang dahulu.");
+    await log(tx, u, "honor-correction", {
+      id: session.id,
+      classId: classroom.id,
+      programId: program.id,
+      teacherId: teacher.id,
+      previousHonor,
+      newHonor,
+      reason,
+    });
+    return updated;
+  });
+}
+
 export async function voidRecord(db: any, u: User, id: string, reason: string) {
   if (u.role !== "owner")
     throw new Error("Hanya pemilik dapat membatalkan transaksi.");
